@@ -94,6 +94,7 @@ def calculate_sl_tp(price, atr_value, direction):
     return sl, tp
 
 # ---------------- SIGNAL GENERATOR ----------------
+# ---------------- SIGNAL GENERATOR ----------------
 def generate_signal():
     if not in_kill_zone():
         print("⏱️ Outside Kill Zones.")
@@ -108,10 +109,14 @@ def generate_signal():
 
     try:
         atr_m1 = atr(df_m1, ATR_PERIOD).iloc[-1]
+        if pd.isna(atr_m1):
+            print("⚠️ ATR is NaN, skipping signal.")
+            return
     except Exception:
         print("⚠️ ATR calculation failed: insufficient data.")
         return
 
+    # Force scalar string values
     bos_signal = detect_bos(df_m1)
     ob_signal = detect_order_block(df_m1)
     trend_m15 = "BUY" if df_m15['Close'].iloc[-1] > df_m15['Close'].iloc[-3] else "SELL"
@@ -119,7 +124,8 @@ def generate_signal():
     direction = None
     risk_percent = 50
 
-    if bos_signal and ob_signal:
+    # ✅ Ensure both signals are strings before comparing
+    if isinstance(bos_signal, str) and isinstance(ob_signal, str):
         if bos_signal == "BOS_UP" and ob_signal == "BUY_OB" and trend_m15 == "BUY":
             direction = "BUY"
             risk_percent = 85
@@ -147,7 +153,6 @@ def generate_signal():
         print("✅ Signal sent!")
     else:
         print("❌ No valid signal now.")
-
 # ---------------- TEST SIGNAL ----------------
 def generate_test_signal(chat_id):
     message = (
