@@ -114,12 +114,21 @@ def generate_signal():
 
     bos_signal = detect_bos(df_m1)
     ob_signal = detect_order_block(df_m1)
-    trend_m15 = "BUY" if df_m15['Close'].iloc[-1] > df_m15['Close'].iloc[-3] else "SELL"
+
+    # --- Safe trend calculation to avoid ambiguous Series error ---
+    trend_m15 = None
+    if len(df_m15) >= 3:
+        last_close = df_m15['Close'].iloc[-1]
+        prev_close = df_m15['Close'].iloc[-3]
+        if pd.notna(last_close) and pd.notna(prev_close):
+            trend_m15 = "BUY" if last_close > prev_close else "SELL"
+    if trend_m15 is None:
+        trend_m15 = "BUY"  # default if insufficient data
 
     direction = None
     risk_percent = 50
 
-    if bos_signal and ob_signal:
+    if bos_signal and ob_signal and trend_m15:
         if bos_signal == "BOS_UP" and ob_signal == "BUY_OB" and trend_m15 == "BUY":
             direction = "BUY"
             risk_percent = 85
