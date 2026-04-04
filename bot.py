@@ -1,154 +1,125 @@
-import MetaTrader5 as mt5
-import pandas as pd
-import yfinance as yf
-import requests
-import time
-from datetime import datetime
+# 📌 Institutional XAUUSD Signal Bot → Sends BUY/SELL signals to Telegram
+# ✅ Features: M1 + M5 trend filter, BOS, Order Blocks, ATR-based SL/TP, Kill Zones
+# 🚀 Sends daily signals to your Telegram bot
 
-# ================= CONFIG =================
-TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import datetime
+import time
+import requests
+
+# ---------------- CONFIG ----------------
+SYMBOL = "XAUUSD=X"
+TIMEFRAME = "1m"  # Primary chart
+TIMEFRAME_M5 = "5m"  # Secondary chart
+ATR_PERIOD = 14
+TP_ATR = 1.5
+SL_ATR = 1
+KILL_ZONES = [("09:00", "11:00"), ("13:00", "15:00")]  # London + NY in UTC
+
+TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
 CHAT_ID = "992623579"
 
-SYMBOL = "XAUUSD"
-RISK_PERCENT = 1
+# ---------------- HELPERS ----------------
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
+    requests.post(url, data=payload)
 
-last_trade_time = 0
-
-# ================= TELEGRAM =================
-def send(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-
-# ================= MT5 =================
-mt5.initialize()
-
-def lot_size(balance, sl_points):
-    risk = balance * (RISK_PERCENT / 100)
-    lot = risk / sl_points
-    return round(lot, 2)
-
-def open_trade(order_type, sl, tp):
-    symbol_info = mt5.symbol_info(SYMBOL)
-    price = mt5.symbol_info_tick(SYMBOL).ask if order_type == "buy" else mt5.symbol_info_tick(SYMBOL).bid
-
-    balance = mt5.account_info().balance
-    lot = lot_size(balance, abs(price - sl))
-
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": SYMBOL,
-        "volume": lot,
-        "type": mt5.ORDER_TYPE_BUY if order_type == "buy" else mt5.ORDER_TYPE_SELL,
-        "price": price,
-        "sl": sl,
-        "tp": tp,
-        "deviation": 20,
-        "magic": 123456,
-        "comment": "AI BOT",
-    }
-
-    mt5.order_send(request)
-
-    send(f"🚀 TRADE OPENED ({order_type.upper()})\nLot: {lot}")
-
-# ================= DATA =================
-def get_data(interval):
-    return yf.download("XAUUSD=X", period="1d", interval=interval)
-
-# ================= AI SCORE =================
-def ai_score(df):
-    score = 0
-    last = df.iloc[-1]
-
-    if last['EMA20'] > last['EMA50']:
-        score += 2
-    if last['Close'] > last['EMA20']:
-        score += 1
-    if last['RSI'] > 50:
-        score += 1
-
-    return score
-
-# ================= INDICATORS =================
-def indicators(df):
-    df['EMA20'] = df['Close'].ewm(span=20).mean()
-    df['EMA50'] = df['Close'].ewm(span=50).mean()
-
-    delta = df['Close'].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    rs = gain.rolling(14).mean() / loss.rolling(14).mean()
-    df['RSI'] = 100 - (100 / (1 + rs))
-
-    df['ATR'] = (df['High'] - df['Low']).rolling(14).mean()
-
+def get_data(symbol, period="2d", interval="1m"):
+    df = yf.download(symbol, period=period, interval=interval, auto_adjust=True)
+    df.dropna(inplace=True)
     return df
 
-# ================= SIGNAL =================
-def check(df):
-    global last_trade_time
+def atr(df, period=14):
+    high_low = df['High'] - df['Low']
+    high_close = np.abs(df['High'] - df['Close'].shift())
+    low_close = np.abs(df['Low'] - df['Close'].shift())
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(period).mean()
+    return atr
 
-    now = time.time()
+def in_kill_zone():
+    now = datetime.datetime.utcnow().time()
+    for start, end in KILL_ZONES:
+        start_t = datetime.time(int(start.split(":")[0]), int(start.split(":")[1]))
+        end_t = datetime.time(int(end.split(":")[0]), int(end.split(":")[1]))
+        if start_t <= now <= end_t:
+            return True
+    return False
 
-    if now - last_trade_time < 300:
+def detect_bos(df):
+    if len(df) < 3:
+        return None
+    if df['Close'].iloc[-1] > df['High'].iloc[-3:-1].max():
+        return "BOS_UP"
+    elif df['Close'].iloc[-1] < df['Low'].iloc[-3:-1].min():
+        return "BOS_DOWN"
+    return None
+
+def detect_order_block(df):
+    last = df.iloc[-1]
+    body = abs(last['Close'] - last['Open'])
+    candle_range = last['High'] - last['Low']
+    if candle_range == 0:
+        return None
+    if body / candle_range > 0.7:
+        if last['Close'] > last['Open']:
+            return "BUY_OB"
+        else:
+            return "SELL_OB"
+    return None
+
+def calculate_sl_tp(price, atr_value, direction):
+    if direction == "BUY":
+        sl = price - SL_ATR * atr_value
+        tp = price + TP_ATR * atr_value
+    else:
+        sl = price + SL_ATR * atr_value
+        tp = price - TP_ATR * atr_value
+    return sl, tp
+
+# ---------------- MAIN ----------------
+def generate_signal():
+    if not in_kill_zone():
+        print("⏱️ Outside Kill Zones. No signals now.")
         return
 
-    score = ai_score(df)
-    last = df.iloc[-1]
+    df_m1 = get_data(SYMBOL, period="1d", interval="1m")
+    df_m5 = get_data(SYMBOL, period="5d", interval="5m")
+    atr_m1 = atr(df_m1, ATR_PERIOD).iloc[-1]
 
-    if score >= 3:
-        entry = last['Close']
-        sl = entry - last['ATR']
-        tp = entry + (last['ATR'] * 2)
+    bos_signal = detect_bos(df_m1)
+    ob_signal = detect_order_block(df_m1)
 
-        open_trade("buy", sl, tp)
-        last_trade_time = now
+    trend = "BUY" if df_m5['Close'].iloc[-1] > df_m5['Close'].iloc[-5] else "SELL"
 
-    if score <= -3:
-        entry = last['Close']
-        sl = entry + last['ATR']
-        tp = entry - (last['ATR'] * 2)
+    direction = None
+    if bos_signal and ob_signal:
+        if bos_signal == "BOS_UP" and ob_signal == "BUY_OB" and trend == "BUY":
+            direction = "BUY"
+        elif bos_signal == "BOS_DOWN" and ob_signal == "SELL_OB" and trend == "SELL":
+            direction = "SELL"
 
-        open_trade("sell", sl, tp)
-        last_trade_time = now
+    if direction:
+        price = df_m1['Close'].iloc[-1]
+        sl, tp = calculate_sl_tp(price, atr_m1, direction)
+        message = (
+            f"💰 XAUUSD SIGNAL 💰\n"
+            f"Direction: {direction}\n"
+            f"Entry: {price:.2f}\n"
+            f"SL: {sl:.2f} | TP: {tp:.2f}\n"
+            f"Kill Zone: Active 🔥"
+        )
+        send_telegram(message)
+        print("✅ Signal sent to Telegram!")
+    else:
+        print("❌ No valid signal now.")
 
-# ================= BREAKEVEN =================
-def manage_trades():
-    positions = mt5.positions_get(symbol=SYMBOL)
-
-    for pos in positions:
-        price = mt5.symbol_info_tick(SYMBOL).bid
-
-        if pos.type == 0:  # buy
-            if price - pos.price_open > 1:
-                mt5.order_send({
-                    "action": mt5.TRADE_ACTION_SLTP,
-                    "position": pos.ticket,
-                    "sl": pos.price_open,
-                    "tp": pos.tp,
-                })
-
-        if pos.type == 1:  # sell
-            if pos.price_open - price > 1:
-                mt5.order_send({
-                    "action": mt5.TRADE_ACTION_SLTP,
-                    "position": pos.ticket,
-                    "sl": pos.price_open,
-                    "tp": pos.tp,
-                })
-
-# ================= LOOP =================
-while True:
-    try:
-        df = get_data("1m")
-        df = indicators(df)
-
-        check(df)
-        manage_trades()
-
-        time.sleep(60)
-
-    except Exception as e:
-        print(e)
-        time.sleep(10)
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    print("📡 XAUUSD Telegram Signal Bot Running...")
+    while True:
+        generate_signal()
+        time.sleep(3600)  # Check every 1 hour (you can adjust)
