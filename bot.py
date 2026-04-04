@@ -179,13 +179,19 @@ def check_for_commands():
         url += f"&offset={update_offset}"
     try:
         response = requests.get(url).json()
+        if not response.get("ok", False):
+            print("⚠️ Telegram API error")
+            return
         for update in response.get("result", []):
             update_offset = update["update_id"] + 1
-            if "message" in update:
-                chat_id = update["message"]["chat"]["id"]
-                text = update["message"].get("text", "")
-                if text.lower() == "/test":
-                    generate_test_signal(chat_id)
+            message = update.get("message")
+            if not message:
+                continue
+            chat_id = message["chat"]["id"]
+            text = message.get("text", "")
+            if text.strip().lower() == "/test":
+                print(f"📩 Test command received from chat {chat_id}")
+                generate_test_signal(chat_id)
     except Exception as e:
         print(f"⚠️ Telegram command check failed: {e}")
 
