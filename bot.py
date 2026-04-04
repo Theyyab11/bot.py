@@ -1,15 +1,12 @@
-# 📌 Institutional Gold Futures GC=F Signal Bot → Safe Scalping Alerts
-# ✅ Works with GC=F on Yahoo, auto-checks for data, fully synchronous, deployable on Railway
-
+# 📌 Institutional Gold Futures GC=F Signal Bot → Fixed Version
 import yfinance as yf
 import pandas as pd
-import numpy as np
 from datetime import datetime, time as dt_time, timezone
 import time
 import requests
 
 # ---------------- CONFIG ----------------
-SYMBOL = "GC=F"           # Gold Futures
+SYMBOL = "GC=F"
 TIMEFRAME = "1m"
 TIMEFRAME_M15 = "15m"
 ATR_PERIOD = 14
@@ -33,7 +30,7 @@ def get_data(symbol, period="2d", interval="1m"):
     try:
         df = yf.download(symbol, period=period, interval=interval, auto_adjust=True)
         if df.empty:
-            print(f"⚠️ No data for {symbol}, skipping...")
+            print(f"⚠️ No data for {symbol}")
             return None
         df.dropna(inplace=True)
         return df
@@ -94,7 +91,6 @@ def calculate_sl_tp(price, atr_value, direction):
     return sl, tp
 
 # ---------------- SIGNAL GENERATOR ----------------
-# ---------------- SIGNAL GENERATOR ----------------
 def generate_signal():
     if not in_kill_zone():
         print("⏱️ Outside Kill Zones.")
@@ -102,21 +98,15 @@ def generate_signal():
 
     df_m1 = get_data(SYMBOL, period="1d", interval="1m")
     df_m15 = get_data(SYMBOL, period="5d", interval="15m")
-
     if df_m1 is None or df_m15 is None:
-        print("❌ Skipping signal: No data available.")
+        print("❌ No data available, skipping.")
         return
 
-    try:
-        atr_m1 = atr(df_m1, ATR_PERIOD).iloc[-1]
-        if pd.isna(atr_m1):
-            print("⚠️ ATR is NaN, skipping signal.")
-            return
-    except Exception:
-        print("⚠️ ATR calculation failed: insufficient data.")
+    atr_m1 = atr(df_m1, ATR_PERIOD).iloc[-1]
+    if pd.isna(atr_m1):
+        print("⚠️ ATR is NaN, skipping.")
         return
 
-    # Force scalar string values
     bos_signal = detect_bos(df_m1)
     ob_signal = detect_order_block(df_m1)
     trend_m15 = "BUY" if df_m15['Close'].iloc[-1] > df_m15['Close'].iloc[-3] else "SELL"
@@ -124,7 +114,7 @@ def generate_signal():
     direction = None
     risk_percent = 50
 
-    # ✅ Ensure both signals are strings before comparing
+    # ✅ Force scalar string check
     if isinstance(bos_signal, str) and isinstance(ob_signal, str):
         if bos_signal == "BOS_UP" and ob_signal == "BUY_OB" and trend_m15 == "BUY":
             direction = "BUY"
@@ -153,6 +143,7 @@ def generate_signal():
         print("✅ Signal sent!")
     else:
         print("❌ No valid signal now.")
+
 # ---------------- TEST SIGNAL ----------------
 def generate_test_signal(chat_id):
     message = (
@@ -170,35 +161,28 @@ def generate_test_signal(chat_id):
 # ---------------- TELEGRAM COMMAND CHECK ----------------
 def check_for_commands():
     global update_offset
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?timeout=10"
+    if update_offset:
+        url += f"&offset={update_offset}"
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?timeout=10"
-        if update_offset:
-            url += f"&offset={update_offset}"
         response = requests.get(url).json()
-
         for update in response.get("result", []):
             update_offset = update["update_id"] + 1
             if "message" in update:
                 chat_id = update["message"]["chat"]["id"]
                 text = update["message"].get("text", "")
-                if text and text.lower() == "/test":
+                if text.lower() == "/test":
                     generate_test_signal(chat_id)
     except Exception as e:
         print(f"⚠️ Telegram command check failed: {e}")
 
-# ---------------- RUN BOT ----------------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
-    # Clear old messages to avoid missing new /test
-    try:
-        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset=-1")
-    except:
-        pass
-
     print("📡 Gold Smart Risk Signal Bot Running...")
     while True:
         try:
-            generate_signal()       # check & send live signals
-            check_for_commands()    # check /test instantly
+            generate_signal()
+            check_for_commands()
         except Exception as e:
             print("⚠️ Runtime error:", e)
-        time.sleep(5)  # 5 sec loop for commands + 1-min signals
+        time.sleep(60)
