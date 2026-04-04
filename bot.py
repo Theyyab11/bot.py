@@ -40,11 +40,13 @@ def atr(df, period=14):
     atr = tr.rolling(period).mean()
     return atr
 
+from datetime import datetime, time, timezone
+
 def in_kill_zone():
-    now = datetime.datetime.utcnow().time()
+    now = datetime.now(timezone.utc).time()  # timezone-aware UTC
     for start, end in KILL_ZONES:
-        start_t = datetime.time(int(start.split(":")[0]), int(start.split(":")[1]))
-        end_t = datetime.time(int(end.split(":")[0]), int(end.split(":")[1]))
+        start_t = time(int(start.split(":")[0]), int(start.split(":")[1]))
+        end_t = time(int(end.split(":")[0]), int(end.split(":")[1]))
         if start_t <= now <= end_t:
             return True
     return False
