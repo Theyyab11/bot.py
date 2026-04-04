@@ -57,17 +57,23 @@ def in_kill_zone():
             return True
     return False
 
+# ---------------- STRATEGY DETECTION ----------------
 def detect_bos(df):
     if len(df) < 3:
         return None
-    if df['Close'].iloc[-1] > df['High'].iloc[-3:-1].max():
+    last_close = df['Close'].iloc[-1]
+    prev_high = df['High'].iloc[-3:-1].max()
+    prev_low = df['Low'].iloc[-3:-1].min()
+    if pd.isna(last_close) or pd.isna(prev_high) or pd.isna(prev_low):
+        return None
+    if last_close > prev_high:
         return "BOS_UP"
-    elif df['Close'].iloc[-1] < df['Low'].iloc[-3:-1].min():
+    elif last_close < prev_low:
         return "BOS_DOWN"
     return None
 
 def detect_order_block(df):
-    if df.empty:
+    if len(df) < 1:
         return None
     last = df.iloc[-1]
     body = abs(last['Close'] - last['Open'])
@@ -75,10 +81,7 @@ def detect_order_block(df):
     if candle_range == 0:
         return None
     if body / candle_range > 0.7:
-        if last['Close'] > last['Open']:
-            return "BUY_OB"
-        else:
-            return "SELL_OB"
+        return "BUY_OB" if last['Close'] > last['Open'] else "SELL_OB"
     return None
 
 def calculate_sl_tp(price, atr_value, direction):
@@ -105,13 +108,12 @@ def generate_signal():
 
     try:
         atr_m1 = atr(df_m1, ATR_PERIOD).iloc[-1]
-    except IndexError:
+    except Exception:
         print("⚠️ ATR calculation failed: insufficient data.")
         return
 
     bos_signal = detect_bos(df_m1)
     ob_signal = detect_order_block(df_m1)
-
     trend_m15 = "BUY" if df_m15['Close'].iloc[-1] > df_m15['Close'].iloc[-3] else "SELL"
 
     direction = None
@@ -129,13 +131,8 @@ def generate_signal():
             risk_percent = 40
 
     if direction:
-        # Be ready alert
-        ready_msg = "⚡ Be ready! Potential Gold signal detected. Monitoring M1..."
-        send_telegram(ready_msg)
-
-        time.sleep(10)  # short confirmation wait
-
-        # Send full signal
+        send_telegram("⚡ Be ready! Potential Gold signal detected. Monitoring M1...")
+        time.sleep(10)
         price = df_m1['Close'].iloc[-1]
         sl, tp = calculate_sl_tp(price, atr_m1, direction)
         message = (
@@ -187,6 +184,9 @@ def check_for_commands():
 if __name__ == "__main__":
     print("📡 Gold Smart Risk Signal Bot Running...")
     while True:
-        generate_signal()
-        check_for_commands()
-        time.sleep(60)  # check every 1 minute
+        try:
+            generate_signal()
+            check_for_commands()
+        except Exception as e:
+            print("⚠️ Runtime error:", e)
+        time.sleep(60)  # 1-minute loop
