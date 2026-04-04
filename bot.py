@@ -9,7 +9,7 @@ import time
 import requests
 
 # ---------------- CONFIG ----------------
-SYMBOL = "GC=F"           # Gold Futures (reliable symbol)
+SYMBOL = "GC=F"           # Gold Futures
 TIMEFRAME = "1m"
 TIMEFRAME_M15 = "15m"
 ATR_PERIOD = 14
@@ -114,21 +114,12 @@ def generate_signal():
 
     bos_signal = detect_bos(df_m1)
     ob_signal = detect_order_block(df_m1)
-
-    # --- Safe trend calculation to avoid ambiguous Series error ---
-    trend_m15 = None
-    if len(df_m15) >= 3:
-        last_close = df_m15['Close'].iloc[-1]
-        prev_close = df_m15['Close'].iloc[-3]
-        if pd.notna(last_close) and pd.notna(prev_close):
-            trend_m15 = "BUY" if last_close > prev_close else "SELL"
-    if trend_m15 is None:
-        trend_m15 = "BUY"  # default if insufficient data
+    trend_m15 = "BUY" if df_m15['Close'].iloc[-1] > df_m15['Close'].iloc[-3] else "SELL"
 
     direction = None
     risk_percent = 50
 
-    if bos_signal and ob_signal and trend_m15:
+    if bos_signal and ob_signal:
         if bos_signal == "BOS_UP" and ob_signal == "BUY_OB" and trend_m15 == "BUY":
             direction = "BUY"
             risk_percent = 85
@@ -173,45 +164,36 @@ def generate_test_signal(chat_id):
 
 # ---------------- TELEGRAM COMMAND CHECK ----------------
 def check_for_commands():
-    """
-    Checks Telegram updates for commands like /test and responds immediately.
-    Ensures no old messages are reprocessed on first run.
-    """
     global update_offset
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?timeout=10"
         if update_offset:
             url += f"&offset={update_offset}"
         response = requests.get(url).json()
-        if not response.get("ok", False):
-            print("⚠️ Telegram API error")
-            return
 
-        results = response.get("result", [])
-        if results:
-            # Update offset to last message to avoid reprocessing old messages
-            update_offset = results[-1]["update_id"] + 1
-
-        for update in results:
-            message = update.get("message")
-            if not message:
-                continue
-            chat_id = message["chat"]["id"]
-            text = message.get("text", "").strip().lower()
-            if text == "/test":
-                print(f"📩 Test command received from chat {chat_id}")
-                generate_test_signal(chat_id)
+        for update in response.get("result", []):
+            update_offset = update["update_id"] + 1
+            if "message" in update:
+                chat_id = update["message"]["chat"]["id"]
+                text = update["message"].get("text", "")
+                if text and text.lower() == "/test":
+                    generate_test_signal(chat_id)
     except Exception as e:
         print(f"⚠️ Telegram command check failed: {e}")
 
-# ---------------- RUN ----------------
-# ---------------- RUN ----------------
+# ---------------- RUN BOT ----------------
 if __name__ == "__main__":
+    # Clear old messages to avoid missing new /test
+    try:
+        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset=-1")
+    except:
+        pass
+
     print("📡 Gold Smart Risk Signal Bot Running...")
     while True:
         try:
-            generate_signal()
-            check_for_commands()  # now fully fixed
+            generate_signal()       # check & send live signals
+            check_for_commands()    # check /test instantly
         except Exception as e:
             print("⚠️ Runtime error:", e)
-        time.sleep(60)  # 1-minute loop
+        time.sleep(5)  # 5 sec loop for commands + 1-min signals
