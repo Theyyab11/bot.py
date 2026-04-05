@@ -1,4 +1,4 @@
-# 🚀 FAST PRO SNIPER BOT (TwelveData Live Prices)
+# 🚀 FAST PRO SNIPER BOT (TwelveData Live Prices, Scalping Mode)
 
 import requests
 import pandas as pd
@@ -6,11 +6,11 @@ import time
 import threading
 
 # ---------------- CONFIG ----------------
-SYMBOLS = ["XAU/USD", "BTC/USD"]  # your Exness symbols
+SYMBOLS = ["XAU/USD", "BTC/USD"]  # Exness symbols
 INTERVAL = "1min"                 # live price interval
 ATR_PERIOD = 14
-MIN_CONFIDENCE = 70
-COOLDOWN_PER_ASSET = 300  # 5 min
+MIN_CONFIDENCE = 85               # strong sniper signal
+COOLDOWN_PER_ASSET = 60           # 1 min per asset (fast scalping)
 
 TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
 CHAT_ID = "992623579"
@@ -34,8 +34,7 @@ def fetch_data(symbol):
         if "values" not in res:
             print(f"Fetch error ({symbol}):", res)
             return None
-        df = pd.DataFrame(res["values"])
-        df = df[::-1]  # reverse to oldest -> newest
+        df = pd.DataFrame(res["values"])[::-1]  # oldest -> newest
         df[['open','high','low','close']] = df[['open','high','low','close']].astype(float)
         return df
     except Exception as e:
@@ -90,9 +89,9 @@ def calculate_confidence(bos, ob, trend, momentum, atr_val):
 
 def calculate_sl_tp(price, atr_val, direction):
     if direction == "BUY":
-        return price - atr_val, price + 1.5 * atr_val
+        return price - 0.5*atr_val, price + atr_val  # tight SL/TP for scalping
     else:
-        return price + atr_val, price - 1.5 * atr_val
+        return price + 0.5*atr_val, price - atr_val
 
 # ---------------- SNIPER SIGNAL ----------------
 def generate_signal():
@@ -157,7 +156,7 @@ def check_commands():
 def run_signals():
     while True:
         generate_signal()
-        time.sleep(300)  # 5 min
+        time.sleep(60)  # 1-minute scalping scan
 
 def run_commands():
     while True:
