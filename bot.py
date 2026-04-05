@@ -23,28 +23,6 @@ MIN_CONFIDENCE = 90  # PRO signals only
 last_signal = {}
 last_sl_tp = {}
 update_offset = None
-
-
-
-print("📌 Waiting for a message in your channel to detect the ID...")
-
-last_update = 0
-while True:
-    try:
-        res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates").json()
-        for update in res.get("result", []):
-            update_id = update["update_id"]
-            if update_id > last_update:
-                last_update = update_id
-                if "channel_post" in update:
-                    chat_id = update["channel_post"]["chat"]["id"]
-                    print(f"✅ Your channel ID is: {chat_id}")
-                    exit()  # stop the script after finding the ID
-        time.sleep(2)
-    except Exception as e:
-        print("Error:", e)
-        time.sleep(5)
-
 # ---------------- TELEGRAM ----------------
 def send_telegram(msg):
     try:
