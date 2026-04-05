@@ -194,7 +194,7 @@ if __name__ == "__main__":
     while True:
         time.sleep(1)
 
-@bot.message_handler(commands=['getchannelid'])
-def get_channel_id(message):
+@bot.message_handler(func=lambda message: True)
+def get_chat_id(message):
     print(message.chat.id)
-    bot.reply_to(message, f"Channel ID: {message.chat.id}")
+    bot.reply_to(message, f"Chat ID: {message.chat.id}")
