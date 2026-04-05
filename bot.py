@@ -18,8 +18,8 @@ ATR_PERIOD = 14
 MIN_CONFIDENCE = 75
 SIGNAL_COOLDOWN = 300  # seconds between signals
 
-TELEGRAM_TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
+CHAT_ID = "992623579"
 
 last_signal_time = 0
 update_offset = None
