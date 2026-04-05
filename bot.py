@@ -1,4 +1,4 @@
-# 🚀 PRO FAST AI SNIPER BOT FIXED SERIES ISSUE
+# 🚀 PRO FAST AI SNIPER BOT FIXED FLOAT ISSUE
 
 import yfinance as yf
 import pandas as pd
@@ -79,10 +79,10 @@ def detect_ob(df):
     if df.empty or len(df) < 1:
         return None
     last = df.iloc[-1]
-    last_close = float(last['Close'])
-    last_open = float(last['Open'])
-    last_high = float(last['High'])
-    last_low = float(last['Low'])
+    last_close = float(last['Close'].item()) if hasattr(last['Close'], 'item') else float(last['Close'])
+    last_open = float(last['Open'].item()) if hasattr(last['Open'], 'item') else float(last['Open'])
+    last_high = float(last['High'].item()) if hasattr(last['High'], 'item') else float(last['High'])
+    last_low = float(last['Low'].item()) if hasattr(last['Low'], 'item') else float(last['Low'])
     body = abs(last_close - last_open)
     rng = last_high - last_low
     if rng == 0:
@@ -100,8 +100,8 @@ def calculate_confidence(bos, ob, trend, momentum, atr_val):
     score = 0
     if bos: score += 25
     if ob: score += 25
-    if bos is not None and ob is not None and isinstance(bos, str) and bos == ob: score += 20
-    if bos is not None and isinstance(bos, str) and trend == bos: score += 15
+    if bos is not None and ob is not None and bos == ob: score += 20
+    if bos is not None and trend == bos: score += 15
     if momentum is not None and atr_val is not None and momentum > (0.8 * atr_val): score += 15
     return min(score, 100)
 
@@ -127,7 +127,7 @@ def generate_signal():
         if df_m1 is None or df_m15 is None:
             continue
 
-        atr_val = atr(df_m1).iloc[-1]
+        atr_val = float(atr(df_m1).iloc[-1])
         if pd.isna(atr_val):
             continue
 
@@ -144,7 +144,7 @@ def generate_signal():
             best_signal = {
                 "direction": bos if bos else trend,
                 "price": float(df_m1['Close'].iloc[-1]),
-                "atr": float(atr_val),
+                "atr": atr_val,
                 "confidence": confidence
             }
 
@@ -196,7 +196,7 @@ def check_commands():
                 if text == "/test":
                     send_telegram("✅ FAST PRO SNIPER BOT ACTIVE 🔥")
                 if text == "/force":
-                    generate_signal()  # only once
+                    generate_signal()  # triggers only once
             update_offset = upd["update_id"] + 1
     except:
         pass
