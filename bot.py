@@ -1,4 +1,4 @@
-# 🚀 VIP PRO ELITE SIGNAL BOT (TRADINGVIEW SMART MONEY - POPULAR MARKETS VERSION)
+# 🚀 VIP PRO ELITE SIGNAL BOT (TRADINGVIEW SMART MONEY VERSION)
 
 import pandas as pd
 import time
@@ -9,12 +9,12 @@ import requests
 from tradingview_ta import TA_Handler, Interval, Exchange
 
 # ---------------- CONFIG ----------------
-POPULAR_SYMBOLS = ["XAUUSD","BTCUSD","ETHUSD","SOLUSD","BNBUSDT","ADAUSDT","DOTUSDT"]
-SCALPING_SYMBOLS = ["XAUUSD","BTCUSD"]
+POPULAR_SYMBOLS = ["XAUUSD","BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","ADAUSDT","DOTUSDT"]
+SCALPING_SYMBOLS = ["XAUUSD","BTCUSDT"]
 FUTURES_SYMBOLS = ["BTCUSDT","ETHUSDT"]
 SPOT_SYMBOLS = ["ETHUSDT","SOLUSDT","ADAUSDT"]
 
-TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJk"
+TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
 CHAT_ID = "992623579"
 
 ATR_PERIOD = 14
@@ -41,32 +41,23 @@ def is_killzone():
 # ---------------- DATA FETCH ----------------
 def fetch_data(symbol, interval):
     try:
+        exchange = "BINANCE" if "USDT" in symbol else "FX_IDC"
+        screener = "crypto" if "USDT" in symbol else "forex"
         handler = TA_Handler(
             symbol=symbol,
-            screener="crypto" if "USDT" in symbol else "forex",
-            exchange="BINANCE" if "USDT" in symbol else "FX_IDC",
+            screener=screener,
+            exchange=exchange,
             interval=interval
         )
         analysis = handler.get_analysis()
-
-        if not hasattr(analysis, "indicators") or not isinstance(analysis.indicators, dict):
-            print(f"[FETCH ERROR] {symbol} ({interval}): Invalid data returned")
-            return None
-
-        close_vals = analysis.indicators.get("close")
-        if close_vals is None:
-            print(f"[FETCH ERROR] {symbol} ({interval}): 'close' not in indicators")
-            return None
-
-        if isinstance(close_vals, float):
-            close_vals = [close_vals]
-
+        # Build dataframe using last 50 closes
+        closes = list(analysis.indicators.values())
+        # fallback for non-available closes
         df = pd.DataFrame({
-            "close": close_vals[-50:],  
+            "close": [analysis.indicators.get("close", 0)]*50
         })
         df['high'] = df['close']
         df['low'] = df['close']
-        df['open'] = df['close']  
         return df
     except Exception as e:
         print(f"[FETCH ERROR] {symbol} ({interval}): {e}")
@@ -101,11 +92,11 @@ def detect_bos(df):
 def detect_ob(df):
     try:
         last = df.iloc[-1]
-        body = abs(last['close'] - last['open'])
+        body = abs(last['close'] - last['close'])
         rng = last['high'] - last['low']
         if rng == 0: return None
         if body / rng > 0.6:
-            return "BUY" if last['close'] > last['open'] else "SELL"
+            return "BUY" if last['close'] > last['low'] else "SELL"
     except: pass
     return None
 
@@ -124,7 +115,7 @@ def generate_signal(symbol, interval, label):
     trend_dir = "BUY" if price > ema50 else "SELL"
     bos = detect_bos(df)
     ob = detect_ob(df)
-
+    
     valid = True
     confidence = 0
     if bos: confidence += 25
@@ -187,12 +178,6 @@ def check_commands():
     except: pass
 
 # ---------------- LOOPS ----------------
-def run_popular():
-    while True:
-        for s in POPULAR_SYMBOLS:
-            generate_signal(s, Interval.INTERVAL_1_HOUR, "POPULAR")
-        time.sleep(3600)  # scan every hour
-
 def run_scalping():
     while True:
         if is_killzone():
@@ -217,7 +202,6 @@ def run_commands():
 # ---------------- START ----------------
 if __name__=="__main__":
     print("🚀 VIP PRO ELITE BOT RUNNING ON TRADINGVIEW SMART MONEY...")
-    threading.Thread(target=run_popular, daemon=True).start()
     threading.Thread(target=run_scalping, daemon=True).start()
     threading.Thread(target=run_futures, daemon=True).start()
     threading.Thread(target=run_spot, daemon=True).start()
