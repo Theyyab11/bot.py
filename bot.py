@@ -176,24 +176,25 @@ def generate_signal():
 # ---------------- COMMANDS FIX ----------------
 def check_commands():
     global update_offset
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
-    if update_offset:
-        url += f"?offset={update_offset}"
-    res = requests.get(url).json()
-    for upd in res.get("result", []):
-        if "message" in upd:
-            chat_id = upd["message"]["chat"]["id"]
-            text = upd["message"].get("text", "").lower()
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+        if update_offset:
+            url += f"?offset={update_offset}"
+        res = requests.get(url, timeout=10).json()
+        for upd in res.get("result", []):
+            if "message" in upd:
+                text = upd["message"].get("text", "").lower()
+                chat_id = upd["message"]["chat"]["id"]
 
-            # Repeatable commands
-            if text == "/test":
-                send_telegram("✅ FAST PRO SNIPER BOT ACTIVE 🔥")
-            if text == "/force":
-                send_telegram("⚡ FORCED SNIPER SIGNAL TEST...")
-                generate_signal()
+                if text == "/test":
+                    send_telegram("✅ FAST PRO SNIPER BOT ACTIVE 🔥")
+                if text == "/force":
+                    send_telegram("⚡ FORCED SNIPER SIGNAL TEST...")
+                    generate_signal()
 
-        # Always update offset to ignore older messages
-        update_offset = upd["update_id"] + 1
+            update_offset = upd["update_id"] + 1
+    except:
+        pass  # ignore network errors
 
 # ---------------- THREADS ----------------
 def run_signals():
@@ -202,7 +203,7 @@ def run_signals():
             generate_signal()
         except Exception as e:
             print("Signal Error:", e)
-        time.sleep(10)  # fast scan
+        time.sleep(10)
 
 def run_commands():
     while True:
@@ -213,9 +214,9 @@ def run_commands():
 if __name__ == "__main__":
     print("🚀 FAST PRO SNIPER BOT RUNNING...")
 
-    # Ignore all old Telegram messages to prevent spam at startup
+    # Ignore all old messages at startup
     try:
-        res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates").json()
+        res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates", timeout=10).json()
         if "result" in res and len(res["result"]) > 0:
             update_offset = res["result"][-1]["update_id"] + 1
     except:
