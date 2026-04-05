@@ -42,7 +42,7 @@ def fetch_data():
         url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval=1min&outputsize=100&apikey={API_KEY}"
         res = requests.get(url).json()
         if "values" not in res:
-            print("Market data unavailable")
+            print("Market data unavailable or API limit reached:", res)
             return None
         df = pd.DataFrame(res["values"])
         df = df[::-1]  # oldest to newest
@@ -75,10 +75,13 @@ def generate_signal():
     global last_signal, last_sl_tp
 
     df = fetch_data()
-    if df is None or df.empty: return
+    if df is None or df.empty:
+        send_telegram("⚠️ Market data unavailable for XAUUSD")
+        return
 
     atr_val = atr(df).iloc[-1]
-    if pd.isna(atr_val) or atr_val == 0: return
+    if pd.isna(atr_val) or atr_val == 0:
+        return
 
     ema_fast = ema(df, EMA_FAST).iloc[-1]
     ema_slow = ema(df, EMA_SLOW).iloc[-1]
@@ -94,7 +97,8 @@ def generate_signal():
     if mom > 0.8 * atr_val: confidence += 10
     if (direction=="BUY" and price>ema_slow) or (direction=="SELL" and price<ema_slow): confidence += 10
 
-    if confidence < MIN_CONFIDENCE: return
+    if confidence < MIN_CONFIDENCE:
+        return
 
     # 🚨 BE READY ALERT
     if last_signal != direction:
