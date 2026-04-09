@@ -1,6 +1,9 @@
 # ⚡ ROYAL FAST M1 SCALPER (XAUUSD & BTCUSD)
 # 🎯 REAL-TIME ACCURACY: BINANCE WEBSOCKET + GOLD-API.COM
 
+# ⚡ ROYAL FAST M1 SCALPER (XAUUSD & BTCUSD)
+# 🎯 REAL-TIME ACCURACY: BINANCE WEBSOCKET + GOLD-API.COM
+
 import websocket
 import json
 import threading
@@ -13,8 +16,15 @@ import asyncio
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
 # ---------------- CONFIG ----------------
-TELEGRAM_TOKEN = os.environ.get('8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk')
+TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"  # Hardcoded
+
+
+# Optional: Print to confirm
+print(f"Using token: {TELEGRAM_TOKEN[:10]}...")  # Shows first 10 chars
+
+# Rest of your code continues...
 CHAT_ID = "992623579"
 
 # Check if token exists
