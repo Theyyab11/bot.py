@@ -1,6 +1,6 @@
 # ⚡ ROYAL FAST M1 SCALPER (XAUUSD & BTCUSD)
-# 🎯 REAL-TIME ACCURACY WITH MT5 COMPATIBLE PRICES
-# ✅ FIXED: No more "Conflict" errors
+# 🎯 WITH TP/SL TRACKING AND SIGNAL MANAGEMENT
+# ⚡ FASTER SIGNALS - Only 15 candles needed
 
 import websocket
 import json
@@ -21,7 +21,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
 CHAT_ID = "992623579"
 
-# Force delete any existing webhook on startup (Fixes conflict error)
+# Force delete any existing webhook on startup
 try:
     webhook_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
     response = requests.get(webhook_url, timeout=5)
@@ -31,8 +31,8 @@ except Exception as e:
 
 # MT5 Price Offset (adjust these to match your broker)
 MT5_OFFSET = {
-    "XAUUSD": 0.20,  # Change this if your broker adds spread (e.g., 2.50)
-    "BTCUSD": 0   # Change this if your broker adds spread (e.g., 50)
+    "XAUUSD": 0,
+    "BTCUSD": 0
 }
 
 # Scalping Parameters
@@ -51,6 +51,12 @@ TRADING_END_HOUR = 22
 klines = {"BTCUSD": [], "XAUUSD": []}
 last_signal_time = {"BTCUSD": 0, "XAUUSD": 0}
 bot_running = True
+
+# Track active signals for TP/SL monitoring
+active_signals = {
+    "XAUUSD": None,
+    "BTCUSD": None
+}
 
 # Global bot instance
 application = None 
@@ -75,23 +81,12 @@ async def fetch_price(symbol):
     """Fetch current price from reliable source"""
     try:
         if symbol == "XAUUSD":
-            sources = [
-                "https://api.gold-api.com/price/XAU/USD",
-                "https://metals-api.com/api/latest?access_key=demo&base=USD&symbols=XAU"
-            ]
-            for url in sources:
-                try:
-                    res = requests.get(url, timeout=5).json()
-                    if "price" in res:
-                        price = float(res["price"])
-                        price += MT5_OFFSET.get("XAUUSD", 0)
-                        return price
-                    elif "rates" in res and "XAU" in res["rates"]:
-                        price = float(1 / res["rates"]["XAU"])
-                        price += MT5_OFFSET.get("XAUUSD", 0)
-                        return price
-                except:
-                    continue
+            url = "https://api.gold-api.com/price/XAU/USD"
+            res = requests.get(url, timeout=5).json()
+            if "price" in res:
+                price = float(res["price"])
+                price += MT5_OFFSET.get("XAUUSD", 0)
+                return price
             return None
             
         elif symbol == "BTCUSD":
@@ -140,19 +135,80 @@ def calculate_indicators(df):
     return df
 
 # ---------------- SIGNAL ENGINE ----------------
-def generate_signal_message(symbol, direction, price, sl, tp):
+def generate_signal_message(symbol, direction, price, sl):
+    """Generate signal message in exact format you requested"""
+    if direction == "BUY":
+        return (
+            f"<b>GOLD / XAUUSD {direction} NOW</b>\n"
+            f"LIVE 🔥\n\n"
+            f"- POINT : {price:.0f}\n"
+            f"- STOPLOSS : {sl:.0f}\n"
+            f"- TAKE PROFIT : OPEN\n\n"
+            f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
+            f"#168FX"
+        )
+    else:
+        return (
+            f"<b>GOLD / XAUUSD {direction} NOW</b>\n"
+            f"LIVE 🔥\n\n"
+            f"- POINT : {price:.0f}\n"
+            f"- STOPLOSS : {sl:.0f}\n"
+            f"- TAKE PROFIT : OPEN\n\n"
+            f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
+            f"#168FX"
+        )
+
+def generate_btc_signal_message(symbol, direction, price, sl):
+    """Generate BTC signal message"""
+    if direction == "BUY":
+        return (
+            f"<b>BTCUSD {direction} NOW</b>\n"
+            f"LIVE 🔥\n\n"
+            f"- POINT : {price:.0f}\n"
+            f"- STOPLOSS : {sl:.0f}\n"
+            f"- TAKE PROFIT : OPEN\n\n"
+            f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
+            f"#168FX"
+        )
+    else:
+        return (
+            f"<b>BTCUSD {direction} NOW</b>\n"
+            f"LIVE 🔥\n\n"
+            f"- POINT : {price:.0f}\n"
+            f"- STOPLOSS : {sl:.0f}\n"
+            f"- TAKE PROFIT : OPEN\n\n"
+            f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
+            f"#168FX"
+        )
+
+def generate_tp_hit_message(symbol, direction, entry_price, tp_price):
+    """Generate TP hit message"""
+    profit = abs(tp_price - entry_price)
     return (
-        f"<b>{symbol} {direction} NOW</b> 🔥\n\n"
-        f"» POINT      : {price:.2f}\n"
-        f"» STOPLOSS   : {sl:.2f}\n"
-        f"» TAKE PROFIT : OPEN\n\n"
-        f"<i>PLEASE ENSURE PROPER MONEY MANAGEMENT</i> ‼️\n"
-        f"#168FX"
+        f"✅ <b>{symbol} TAKE PROFIT HIT!</b> ✅\n\n"
+        f"Direction: {direction}\n"
+        f"Entry: {entry_price:.0f}\n"
+        f"TP Hit: {tp_price:.0f}\n"
+        f"Profit: +{profit:.0f} points\n\n"
+        f"#168FX #PROFIT"
+    )
+
+def generate_sl_hit_message(symbol, direction, entry_price, sl_price):
+    """Generate SL hit message"""
+    loss = abs(sl_price - entry_price)
+    return (
+        f"❌ <b>{symbol} STOPLOSS HIT!</b> ❌\n\n"
+        f"Direction: {direction}\n"
+        f"Entry: {entry_price:.0f}\n"
+        f"SL Hit: {sl_price:.0f}\n"
+        f"Loss: -{loss:.0f} points\n\n"
+        f"#168FX #STOPLOSS"
     )
 
 async def check_signal(symbol, df, chat_id=CHAT_ID):
-    global last_signal_time
-    if len(df) < 30: 
+    global last_signal_time, active_signals
+    # CHANGED: 30 to 15 for faster signals
+    if len(df) < 15: 
         return
     
     try:
@@ -171,22 +227,101 @@ async def check_signal(symbol, df, chat_id=CHAT_ID):
             direction = "SELL"
             
         if direction:
+            # Check if enough time has passed since last signal (5 minutes)
             if time.time() - last_signal_time[symbol] < 300:
                 return
+            
+            # Calculate SL (1.5x ATR) and TP (2.5x ATR)
             if direction == "BUY":
                 sl = price - (1.5 * atr_val)
+                tp = price + (2.5 * atr_val)
             else:
                 sl = price + (1.5 * atr_val)
-                
-            msg = generate_signal_message(symbol, direction, price, sl, "OPEN")
+                tp = price - (2.5 * atr_val)
+            
+            # Generate message based on symbol
+            if symbol == "XAUUSD":
+                msg = generate_signal_message(symbol, direction, price, sl)
+            else:
+                msg = generate_btc_signal_message(symbol, direction, price, sl)
+            
+            # Send signal
             await send_telegram(msg, chat_id)
+            
+            # Store active signal for monitoring
+            active_signals[symbol] = {
+                "direction": direction,
+                "entry_price": price,
+                "sl": sl,
+                "tp": tp,
+                "timestamp": time.time(),
+                "symbol": symbol
+            }
+            
             last_signal_time[symbol] = time.time()
+            print(f"📊 New {symbol} {direction} signal at {price:.2f}, SL: {sl:.2f}, TP: {tp:.2f}")
+            
     except Exception as e:
         print(f"Signal check error: {e}")
 
+async def monitor_tp_sl():
+    """Monitor active signals for TP/SL hits"""
+    global active_signals
+    
+    while bot_running:
+        try:
+            for symbol, signal in list(active_signals.items()):
+                if signal is None:
+                    continue
+                
+                # Get current price
+                current_price = await fetch_price(symbol)
+                if current_price is None:
+                    continue
+                
+                entry = signal["entry_price"]
+                sl = signal["sl"]
+                tp = signal["tp"]
+                direction = signal["direction"]
+                
+                # Check for TP hit
+                if direction == "BUY":
+                    if current_price >= tp:
+                        msg = generate_tp_hit_message(symbol, direction, entry, tp)
+                        await send_telegram(msg)
+                        print(f"✅ {symbol} TP HIT at {current_price:.2f}")
+                        active_signals[symbol] = None
+                    elif current_price <= sl:
+                        msg = generate_sl_hit_message(symbol, direction, entry, sl)
+                        await send_telegram(msg)
+                        print(f"❌ {symbol} SL HIT at {current_price:.2f}")
+                        active_signals[symbol] = None
+                else:  # SELL
+                    if current_price <= tp:
+                        msg = generate_tp_hit_message(symbol, direction, entry, tp)
+                        await send_telegram(msg)
+                        print(f"✅ {symbol} TP HIT at {current_price:.2f}")
+                        active_signals[symbol] = None
+                    elif current_price >= sl:
+                        msg = generate_sl_hit_message(symbol, direction, entry, sl)
+                        await send_telegram(msg)
+                        print(f"❌ {symbol} SL HIT at {current_price:.2f}")
+                        active_signals[symbol] = None
+                
+                # Remove old signals (older than 24 hours)
+                if time.time() - signal["timestamp"] > 86400:
+                    active_signals[symbol] = None
+                    
+            await asyncio.sleep(5)  # Check every 5 seconds
+            
+        except Exception as e:
+            print(f"TP/SL monitor error: {e}")
+            await asyncio.sleep(5)
+
 async def get_latest_signal(symbol, df):
     """Get the latest signal without sending to Telegram"""
-    if len(df) < 30:
+    # CHANGED: 30 to 15 for faster signals
+    if len(df) < 15:
         return None
     
     try:
@@ -210,7 +345,10 @@ async def get_latest_signal(symbol, df):
             else:
                 sl = price + (1.5 * atr_val)
             
-            return generate_signal_message(symbol, direction, price, sl, "OPEN")
+            if symbol == "XAUUSD":
+                return generate_signal_message(symbol, direction, price, sl)
+            else:
+                return generate_btc_signal_message(symbol, direction, price, sl)
         return None
     except Exception as e:
         print(f"Signal generation error: {e}")
@@ -234,7 +372,7 @@ async def fetch_gold_price_loop():
                 if len(klines["XAUUSD"]) > 100: 
                     klines["XAUUSD"].pop(0)
                 
-                if len(klines["XAUUSD"]) >= ATR_PERIOD + 10:
+                if len(klines["XAUUSD"]) >= ATR_PERIOD + 5:  # Changed from +10 to +5
                     df = pd.DataFrame(klines["XAUUSD"])
                     df = calculate_indicators(df)
                     await check_signal("XAUUSD", df)
@@ -262,10 +400,9 @@ def on_btc_message(ws, message):
                 if len(klines["BTCUSD"]) > 100: 
                     klines["BTCUSD"].pop(0)
                 
-                if len(klines["BTCUSD"]) >= ATR_PERIOD + 10:
+                if len(klines["BTCUSD"]) >= ATR_PERIOD + 5:  # Changed from +10 to +5
                     df = pd.DataFrame(klines["BTCUSD"])
                     df = calculate_indicators(df)
-                    # Create new event loop for async
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     loop.run_until_complete(check_signal("BTCUSD", df))
@@ -291,8 +428,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "📊 /price - Current prices\n"
         "🎯 /signal - Latest trading signal\n"
         "📈 /status - Bot status & market conditions\n"
+        "📋 /active - Show active signals with TP/SL\n"
         "❓ /help - Show all commands\n\n"
-        "<i>Signals generated based on EMA crossover + RSI confirmation</i>"
+        "<i>⚡ FAST MODE: Signals after just 15 candles (15 minutes)\n"
+        "🎯 TP/SL will be automatically monitored!</i>"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -302,16 +441,51 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/price - Get current MT5 prices\n"
         "/signal - Get latest trading signals\n"
         "/status - Check bot status\n"
+        "/active - Show active signals with TP/SL\n"
         "/help - Show this help\n\n"
         "<b>📊 SIGNAL CRITERIA:</b>\n"
         "• EMA 9/21 crossover\n"
         "• RSI confirmation (35-65)\n"
         "• ATR-based stop loss\n\n"
-        "<b>⏰ Trading Hours:</b>\n"
-        "• 06:00 - 22:00 UTC\n"
-        "• 10:00 - 02:00 GMT+4\n\n"
+        "<b>🎯 TP/SL Monitoring:</b>\n"
+        "• TP: 2.5x ATR\n"
+        "• SL: 1.5x ATR\n"
+        "• Auto-notification on hit\n\n"
+        "<b>⚡ FAST MODE:</b>\n"
+        "• Signals after 15 candles (was 30)\n"
+        "• Faster signal generation\n"
+        "• 50% faster response time\n\n"
         "<i>Signals auto-send when conditions are met</i>"
     )
+
+async def active_signals_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show currently active signals with their TP/SL levels"""
+    global active_signals
+    
+    has_active = False
+    msg = "<b>📋 ACTIVE SIGNALS</b>\n\n"
+    
+    for symbol, signal in active_signals.items():
+        if signal is not None:
+            has_active = True
+            direction = signal["direction"]
+            entry = signal["entry_price"]
+            sl = signal["sl"]
+            tp = signal["tp"]
+            age = int((time.time() - signal["timestamp"]) / 60)  # Age in minutes
+            
+            msg += f"<b>{symbol}</b>\n"
+            msg += f"Direction: {direction}\n"
+            msg += f"Entry: {entry:.0f}\n"
+            msg += f"SL: {sl:.0f}\n"
+            msg += f"TP: {tp:.0f}\n"
+            msg += f"Age: {age} minutes\n\n"
+    
+    if not has_active:
+        msg += "No active signals at this time.\n"
+        msg += "Signals will appear here when generated."
+    
+    await update.message.reply_html(msg)
 
 async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send the latest signal for both symbols"""
@@ -319,8 +493,8 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     messages = []
     
-    # Check XAUUSD signal
-    if len(klines["XAUUSD"]) >= 30:
+    # Check XAUUSD signal - CHANGED: 30 to 15
+    if len(klines["XAUUSD"]) >= 15:
         df_xau = pd.DataFrame(klines["XAUUSD"])
         df_xau = calculate_indicators(df_xau)
         signal_xau = await get_latest_signal("XAUUSD", df_xau)
@@ -332,13 +506,14 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 f"<b>🥇 XAUUSD - No Active Signal</b>\n"
                 f"📊 RSI: {latest['rsi']:.1f}\n"
                 f"📈 EMA Trend: {'Bullish' if latest['ema_fast'] > latest['ema_slow'] else 'Bearish'}\n"
-                f"💰 Price: ${latest['close']:.2f}"
+                f"💰 Price: ${latest['close']:.2f}\n"
+                f"📊 Data: {len(klines['XAUUSD'])}/15 candles"
             )
     else:
-        messages.append("🟡 XAUUSD: Not enough data (need 30 candles)")
+        messages.append(f"🟡 XAUUSD: Need 15 candles, have {len(klines['XAUUSD'])}/15")
     
-    # Check BTCUSD signal
-    if len(klines["BTCUSD"]) >= 30:
+    # Check BTCUSD signal - CHANGED: 30 to 15
+    if len(klines["BTCUSD"]) >= 15:
         df_btc = pd.DataFrame(klines["BTCUSD"])
         df_btc = calculate_indicators(df_btc)
         signal_btc = await get_latest_signal("BTCUSD", df_btc)
@@ -350,10 +525,11 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 f"<b>₿ BTCUSD - No Active Signal</b>\n"
                 f"📊 RSI: {latest['rsi']:.1f}\n"
                 f"📈 EMA Trend: {'Bullish' if latest['ema_fast'] > latest['ema_slow'] else 'Bearish'}\n"
-                f"💰 Price: ${latest['close']:.2f}"
+                f"💰 Price: ${latest['close']:.2f}\n"
+                f"📊 Data: {len(klines['BTCUSD'])}/15 candles"
             )
     else:
-        messages.append("🟠 BTCUSD: Not enough data (need 30 candles)")
+        messages.append(f"🟠 BTCUSD: Need 15 candles, have {len(klines['BTCUSD'])}/15")
     
     await update.message.reply_html("\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages))
 
@@ -389,14 +565,14 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     xau_price = "N/A"
     btc_price = "N/A"
     
-    if xau_data >= 30:
+    if xau_data >= 15:
         df_xau = pd.DataFrame(klines["XAUUSD"])
         df_xau = calculate_indicators(df_xau)
         latest = df_xau.iloc[-1]
         xau_price = f"${latest['close']:.2f}"
         xau_condition = f"📊 RSI: {latest['rsi']:.1f} | {'🟢 BULLISH' if latest['ema_fast'] > latest['ema_slow'] else '🔴 BEARISH'}"
     
-    if btc_data >= 30:
+    if btc_data >= 15:
         df_btc = pd.DataFrame(klines["BTCUSD"])
         df_btc = calculate_indicators(df_btc)
         latest = df_btc.iloc[-1]
@@ -406,9 +582,14 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     current_hour = datetime.now(pytz.UTC).hour
     is_trading_time = TRADING_START_HOUR <= current_hour <= TRADING_END_HOUR
     
+    # Count active signals
+    active_count = sum(1 for s in active_signals.values() if s is not None)
+    
     msg = f"<b>🤖 BOT STATUS</b>\n\n"
     msg += f"✅ Status: <b>RUNNING</b>\n"
-    msg += f"📊 Data: XAUUSD={xau_data}/100 | BTCUSD={btc_data}/100\n"
+    msg += f"⚡ Mode: <b>FAST (15 candles)</b>\n"
+    msg += f"📊 Data: XAUUSD={xau_data}/15 | BTCUSD={btc_data}/15\n"
+    msg += f"🎯 Active Signals: {active_count}\n"
     msg += f"⏰ Trading Hours: {'🟢 ACTIVE' if is_trading_time else '🔴 CLOSED'} (UTC {TRADING_START_HOUR}-{TRADING_END_HOUR})\n\n"
     msg += f"<b>📈 MARKET CONDITIONS:</b>\n"
     msg += f"🥇 XAUUSD: {xau_price}\n"
@@ -425,7 +606,8 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # ---------------- MAIN ----------------
 async def main():
     global application, bot_running
-    print("🚀 Starting ROYAL M1 SCALPER...")
+    print("🚀 Starting ROYAL M1 SCALPER - FAST MODE...")
+    print(f"⚡ Signals will generate after just 15 candles (15 minutes)")
     print(f"📊 MT5 Offset: XAUUSD={MT5_OFFSET['XAUUSD']}, BTCUSD={MT5_OFFSET['BTCUSD']}")
     
     # Build application
@@ -435,6 +617,7 @@ async def main():
     application.add_handler(CommandHandler("price", price_command))
     application.add_handler(CommandHandler("signal", signal_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("active", active_signals_command))
     application.add_handler(CommandHandler("test", test_command))
 
     # Start the bot
@@ -444,8 +627,11 @@ async def main():
     # Start polling with drop_pending_updates to avoid conflicts
     await application.updater.start_polling(drop_pending_updates=True)
     
-    print("✅ Bot started successfully!")
-    await send_telegram("✅ ROYAL M1 SCALPER ONLINE - REAL-TIME MODE\n\nSignals will be sent automatically when conditions are met.")
+    print("✅ Bot started successfully in FAST MODE!")
+    await send_telegram("✅ ROYAL M1 SCALPER ONLINE - FAST MODE ⚡\n\n⚡ Signals after just 15 minutes!\n🎯 TP/SL will be monitored automatically!")
+    
+    # Start TP/SL monitor
+    asyncio.create_task(monitor_tp_sl())
     
     # Start BTC WebSocket in thread
     btc_thread = threading.Thread(target=run_btc_ws, daemon=True)
