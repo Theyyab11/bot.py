@@ -1,5 +1,6 @@
-websocket-client
-pandas
-requests
-pytz
 python-telegram-bot>=21.10
+websocket-client>=1.6.0
+pandas>=2.0.0
+requests>=2.31.0
+pytz>=2023.3
+numpy>=1.24.0
