@@ -1,3 +1,4 @@
+
 import requests
 import pandas as pd
 import time
@@ -53,7 +54,7 @@ def fetch_data(retries=5, delay=5):
                 continue
                 
             raw_data = res["Time Series (Daily)"]
-            df = pd.DataFrame.from_dict(raw_data, orient=\'index\')
+            df = pd.DataFrame.from_dict(raw_data, orient='index')
             df.index = pd.to_datetime(df.index)
             df = df.sort_index() # oldest to newest
             
