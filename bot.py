@@ -15,7 +15,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # ---------------- CONFIG ----------------
-TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')  # Get from Railway environment
+TELEGRAM_TOKEN = os.environ.get('8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk')  # Get from Railway environment
 CHAT_ID = "992623579"
 
 # Scalping Parameters
