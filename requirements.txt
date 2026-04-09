@@ -1,4 +1,4 @@
-requests
+websocket-client
 pandas
+requests
 pytz
-yfinance
