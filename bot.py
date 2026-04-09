@@ -9,6 +9,8 @@ import pandas as pd
 import requests
 from datetime import datetime
 import pytz
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
 # ---------------- CONFIG ----------------
 TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
@@ -30,13 +32,24 @@ TRADING_END_HOUR = 22
 klines = {"BTCUSD": [], "XAUUSD": []}
 last_signal_time = {"BTCUSD": 0, "XAUUSD": 0}
 
+# Global bot instance for sending messages
+bot_instance = None
+
 # ---------------- TELEGRAM ----------------
-def send_telegram(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"})
-    except Exception as e:
-        print("Telegram error:", e)
+def send_telegram(msg, chat_id=CHAT_ID):
+    global bot_instance
+    if bot_instance:
+        try:
+            bot_instance.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+        except Exception as e:
+            print(f"Telegram send error: {e}")
+    else:
+        # Fallback if bot_instance is not yet initialized (e.g., initial online message)
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+        except Exception as e:
+            print(f"Telegram fallback send error: {e}")
 
 # ---------------- INDICATORS ----------------
 def calculate_indicators(df):
@@ -62,7 +75,17 @@ def calculate_indicators(df):
     return df
 
 # ---------------- SIGNAL ENGINE ----------------
-def check_signal(symbol, df):
+def generate_signal_message(symbol, direction, price, sl, tp):
+    return (
+        f"<b>{symbol} {direction} NOW</b> 🔥\n\n"
+        f"» POINT      : {price:.2f}\n"
+        f"» STOPLOSS   : {sl:.2f}\n"
+        f"» TAKE PROFIT : {tp:.2f}\n\n"
+        f"<i>PLEASE ENSURE PROPER MONEY MANAGEMENT</i> ‼️\n"
+        f"#168FX"
+    )
+
+def check_signal(symbol, df, chat_id=CHAT_ID):
     global last_signal_time
     
     if len(df) < 30: return
@@ -96,22 +119,12 @@ def check_signal(symbol, df):
             sl = price + (1.5 * atr_val)
             tp = price - (2.0 * atr_val)
             
-        # Format message to match user's image
-        msg = (
-            f"<b>{symbol} {direction} NOW</b> 🔥\n\n"
-            f"» POINT      : {price:.2f}\n"
-            f"» STOPLOSS   : {sl:.2f}\n"
-            f"» TAKE PROFIT : OPEN\n\n"
-            f"<i>PLEASE ENSURE PROPER MONEY MANAGEMENT</i> ‼️\n"
-            f"#168FX"
-        )
-        send_telegram(msg)
+        msg = generate_signal_message(symbol, direction, price, sl, tp)
+        send_telegram(msg, chat_id)
         last_signal_time[symbol] = time.time()
 
 # ---------------- DATA FETCHING ----------------
 def fetch_gold_price():
-    # Gold-API.com for Gold (REST) - No Key Required
-    # Free endpoint: https://api.gold-api.com/price/XAU/USD
     while True:
         try:
             url = "https://api.gold-api.com/price/XAU/USD"
@@ -153,9 +166,58 @@ def run_btc_ws():
     ws = websocket.WebSocketApp(ws_url, on_message=on_btc_message)
     ws.run_forever()
 
+# ---------------- TELEGRAM COMMAND HANDLERS ----------------
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_html("✅ ROYAL M1 SCALPER ONLINE - REAL-TIME MODE")
+
+def test_command(update: Update, context: CallbackContext) -> None:
+    update.message.reply_html("Bot is active and responding!")
+
+def signal_command(update: Update, context: CallbackContext) -> None:
+    # Force a signal check for both symbols
+    for symbol in klines:
+        if len(klines[symbol]) > 30:
+            df = pd.DataFrame(klines[symbol])
+            df = calculate_indicators(df)
+            # Temporarily set last_signal_time to 0 to force a signal
+            original_last_signal_time = last_signal_time[symbol]
+            last_signal_time[symbol] = 0
+            check_signal(symbol, df, update.message.chat_id)
+            last_signal_time[symbol] = original_last_signal_time # Restore original
+        else:
+            update.message.reply_html(f"Not enough data for {symbol} to generate a signal yet.")
+
+def price_command(update: Update, context: CallbackContext) -> None:
+    # Get current prices for both symbols
+    xau_price = klines["XAUUSD"][-1]["close"] if klines["XAUUSD"] else "N/A"
+    btc_price = klines["BTCUSD"][-1]["close"] if klines["BTCUSD"] else "N/A"
+    msg = (
+        f"<b>CURRENT PRICES</b>\n\n"
+        f"» XAUUSD : {xau_price:.2f}\n"
+        f"» BTCUSD : {btc_price:.2f}"
+    )
+    update.message.reply_html(msg)
+
 # ---------------- START ----------------
 if __name__ == "__main__":
     print("🚀 ROYAL FAST M1 SCALPER STARTING...")
+    
+    # Initialize Telegram Updater and Dispatcher
+    updater = Updater(TELEGRAM_TOKEN)
+    dispatcher = updater.dispatcher
+    bot_instance = updater.bot # Set global bot instance
+
+    # Add command handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("test", test_command))
+    dispatcher.add_handler(CommandHandler("signal", signal_command))
+    dispatcher.add_handler(CommandHandler("price", price_command))
+
+    # Start the Telegram bot in a separate thread
+    updater_thread = threading.Thread(target=updater.start_polling, daemon=True)
+    updater_thread.start()
+
+    # Send initial online message
     send_telegram("✅ ROYAL M1 SCALPER ONLINE - REAL-TIME MODE")
     
     # Start BTC WebSocket
@@ -164,5 +226,5 @@ if __name__ == "__main__":
     # Start Gold REST Fetcher
     threading.Thread(target=fetch_gold_price, daemon=True).start()
     
-    while True:
-        time.sleep(1)
+    # Keep the main thread alive
+    updater_thread.join() # This will keep the main thread alive as long as the updater is running
