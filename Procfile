@@ -1,1 +1,1 @@
-worker: python final_m1_scalper_interactive_v2.py
+worker: python bot.py
