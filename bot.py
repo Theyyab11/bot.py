@@ -1,6 +1,6 @@
 # 👑 ROYAL ULTIMATE SNIPER M1 SCALPER (XAUUSD & BTCUSD) - V5
 # 🎯 EXNESS PRICE SYNC | 20+ PIP TPs | 35-PIP SL | LAYERING (DCA)
-# 🚀 PREDICTIVE ALERTS & TREND-STRENGTH ANALYSIS
+# 🚀 CONFLICT-PROOF STARTUP | PREDICTIVE ALERTS
 
 import websocket
 import json
@@ -75,13 +75,11 @@ async def fetch_price(symbol):
             url = "https://api.gold-api.com/price/XAU/USD"
             res = requests.get(url, timeout=5).json()
             if "price" in res:
-                # Apply Exness Sync Offset
                 return float(res["price"]) + EXNESS_OFFSET.get("XAUUSD", 0)
         elif symbol == "BTCUSD":
             url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
             res = requests.get(url, timeout=5).json()
             if "price" in res:
-                # Apply Exness Sync Offset
                 return float(res["price"]) + EXNESS_OFFSET.get("BTCUSD", 0)
     except Exception as e:
         logger.error(f"Error fetching {symbol}: {e}")
@@ -279,7 +277,6 @@ def on_btc_message(ws, message):
         data = json.loads(message)
         if "k" in data and data["k"]["x"]:
             k = data["k"]
-            # Apply Exness Sync Offset to BTC
             price = float(k["c"]) + EXNESS_OFFSET.get("BTCUSD", 0)
             klines["BTCUSD"].append({
                 "open": float(k["o"]) + EXNESS_OFFSET.get("BTCUSD", 0), 
@@ -354,11 +351,13 @@ async def main():
     global application, main_loop
     main_loop = asyncio.get_running_loop()
     
-    # 💎 FIX CONFLICT ERROR: Delete webhook and clear old updates
-    try:
-        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook", timeout=5)
-        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset=-1&limit=1", timeout=5)
-    except: pass
+    # 💎 ENHANCED CONFLICT FIX: Delete webhook and clear old updates multiple times
+    for _ in range(3):
+        try:
+            requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook", timeout=5)
+            requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset=-1&limit=1", timeout=5)
+            time.sleep(1)
+        except: pass
 
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     application.add_error_handler(error_handler)
@@ -373,7 +372,7 @@ async def main():
     await application.updater.start_polling(drop_pending_updates=True)
     
     print("✅ Ultimate Sniper Bot V5 Started")
-    await send_telegram("🚀 <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n<i>Exness Price Sync Activated.</i>")
+    await send_telegram("🚀 <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n<i>Conflict-Proof mode activated.</i>")
     
     asyncio.create_task(monitor_tp_sl())
     threading.Thread(target=run_btc_ws, daemon=True).start()
