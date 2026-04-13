@@ -127,13 +127,21 @@ def calculate_indicators(df):
 # ---------------- SIGNAL ENGINE ----------------
 def generate_sniper_message(symbol, direction, price, sl, tps):
     price_format = ".2f" if symbol == "XAUUSD" else ".0f"
-    tp_text = "\n".join([f"🎯 TP {i+1}: {tp:{price_format}}" for i, tp in enumerate(tps)])
+    
+    # Safe formatting for sniper message
+    p_str = f"{price:{price_format}}" if price is not None else "N/A"
+    sl_str = f"{sl:{price_format}}" if sl is not None else "N/A"
+    tp_lines = []
+    for i, tp in enumerate(tps):
+        tp_str = f"{tp:{price_format}}" if tp is not None else "N/A"
+        tp_lines.append(f"🎯 TP {i+1}: {tp_str}")
+    tp_text = "\n".join(tp_lines)
     
     return (
         f"<b>🚀 SNIPER {symbol} {direction} NOW</b>\n"
-        f"ENTRY: {price:{price_format}}\n\n"
+        f"ENTRY: {p_str}\n\n"
         f"{tp_text}\n"
-        f"🛑 SL: {sl:{price_format}}\n\n"
+        f"🛑 SL: {sl_str}\n\n"
         f"⚡ <i>Breakeven applied after TP 1</i>\n"
         f"#168FX #SNIPER"
     )
@@ -303,10 +311,19 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html("<b>Wait. I will give you a good entry shortly.</b>")
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    xau = await fetch_price("XAUUSD")
-    btc = await fetch_price("BTCUSD")
-    msg = f"<b>💰 PRICES</b>\n\nXAUUSD: ${xau:.2f}\nBTCUSD: ${btc:.0f}"
-    await update.message.reply_html(msg)
+    try:
+        xau = await fetch_price("XAUUSD")
+        btc = await fetch_price("BTCUSD")
+        
+        # Bulletproof formatting for price command
+        xau_str = f"${xau:.2f}" if xau is not None else "Unavailable"
+        btc_str = f"${btc:.0f}" if btc is not None else "Unavailable"
+        
+        msg = f"<b>💰 PRICES</b>\n\nXAUUSD: {xau_str}\nBTCUSD: {btc_str}"
+        await update.message.reply_html(msg)
+    except Exception as e:
+        logger.error(f"Error in price_command: {e}")
+        await update.message.reply_html("❌ Error fetching prices.")
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "<b>🤖 SNIPER STATUS: ACTIVE</b>\n\n"
@@ -320,15 +337,26 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for symbol, signal_data in active_signals.items():
         if signal_data:
             has_active = True
-            msg += f"<b>{symbol}</b>: {signal_data['direction']} @ {signal_data['entry']}\n"
+            price_format = ".2f" if symbol == "XAUUSD" else ".0f"
+            e_str = f"{signal_data['entry']:{price_format}}" if signal_data['entry'] is not None else "N/A"
+            msg += f"<b>{symbol}</b>: {signal_data['direction']} @ {e_str}\n"
     if not has_active: msg += "No active signals."
     await update.message.reply_html(msg)
+
+# ---------------- ERROR HANDLER ----------------
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        await update.effective_message.reply_text("⚠️ An internal error occurred. The bot is still running.")
 
 # ---------------- MAIN ----------------
 async def main():
     global application, main_loop
     main_loop = asyncio.get_running_loop()
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Add error handler
+    application.add_error_handler(error_handler)
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("signal", signal_command))
@@ -338,7 +366,7 @@ async def main():
     
     await application.initialize()
     await application.start()
-    await application.updater.start_polling()
+    await application.updater.start_polling(drop_pending_updates=True)
     
     print("✅ Sniper Bot V4 Started")
     await send_telegram("🚀 <b>ROYAL SNIPER V4 ONLINE</b>\n<i>Aggressive mode activated.</i>")
@@ -348,4 +376,10 @@ async def main():
     await fetch_gold_price_loop()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("🛑 Bot stopped")
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        sys.exit(1)
