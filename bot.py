@@ -1,5 +1,5 @@
-# ⚡ ROYAL ULTIMATE SNIPER M1 SCALPER (XAUUSD & BTCUSD) - V5
-# 🎯 20+ PIP TPs | 35-PIP SL | AUTOMATIC LAYERING (DCA)
+# 👑 ROYAL ULTIMATE SNIPER M1 SCALPER (XAUUSD & BTCUSD) - V5
+# 🎯 EXNESS PRICE SYNC | 20+ PIP TPs | 35-PIP SL | LAYERING (DCA)
 # 🚀 PREDICTIVE ALERTS & TREND-STRENGTH ANALYSIS
 
 import websocket
@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
 CHAT_ID = "992623579"
 
-# MT5 Price Offset
-MT5_OFFSET = {"XAUUSD": 0.20, "BTCUSD": 0.20}
+# 💎 EXNESS PRICE SYNC (Adjust these to match your Exness terminal exactly)
+EXNESS_OFFSET = {
+    "XAUUSD": 0.15,  # Add/Subtract to match Exness Gold price
+    "BTCUSD": 5.00   # Add/Subtract to match Exness Bitcoin price
+}
 
 # Scalping Parameters
 ATR_PERIOD = 14
@@ -72,12 +75,14 @@ async def fetch_price(symbol):
             url = "https://api.gold-api.com/price/XAU/USD"
             res = requests.get(url, timeout=5).json()
             if "price" in res:
-                return float(res["price"]) + MT5_OFFSET.get("XAUUSD", 0)
+                # Apply Exness Sync Offset
+                return float(res["price"]) + EXNESS_OFFSET.get("XAUUSD", 0)
         elif symbol == "BTCUSD":
             url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
             res = requests.get(url, timeout=5).json()
             if "price" in res:
-                return float(res["price"]) + MT5_OFFSET.get("BTCUSD", 0)
+                # Apply Exness Sync Offset
+                return float(res["price"]) + EXNESS_OFFSET.get("BTCUSD", 0)
     except Exception as e:
         logger.error(f"Error fetching {symbol}: {e}")
     return None
@@ -143,7 +148,7 @@ def generate_ultimate_sniper_message(symbol, direction, price, sl, tps):
         f"ENTRY: {p_str}\n\n"
         f"{tp_text}\n"
         f"🛑 SL: {sl_str}\n\n"
-        f"⚡ <i>Aggressive Layering Active</i>\n"
+        f"⚡ <i>Exness Price Sync Active</i>\n"
         f"#168FX #ULTIMATE"
     )
 
@@ -274,11 +279,12 @@ def on_btc_message(ws, message):
         data = json.loads(message)
         if "k" in data and data["k"]["x"]:
             k = data["k"]
-            price = float(k["c"]) + MT5_OFFSET.get("BTCUSD", 0)
+            # Apply Exness Sync Offset to BTC
+            price = float(k["c"]) + EXNESS_OFFSET.get("BTCUSD", 0)
             klines["BTCUSD"].append({
-                "open": float(k["o"]) + MT5_OFFSET.get("BTCUSD", 0), 
-                "high": float(k["h"]) + MT5_OFFSET.get("BTCUSD", 0),
-                "low": float(k["l"]) + MT5_OFFSET.get("BTCUSD", 0), 
+                "open": float(k["o"]) + EXNESS_OFFSET.get("BTCUSD", 0), 
+                "high": float(k["h"]) + EXNESS_OFFSET.get("BTCUSD", 0),
+                "low": float(k["l"]) + EXNESS_OFFSET.get("BTCUSD", 0), 
                 "close": price, "volume": float(k["v"]), "timestamp": time.time()
             })
             if len(klines["BTCUSD"]) > 100: klines["BTCUSD"].pop(0)
@@ -313,7 +319,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         btc = await fetch_price("BTCUSD")
         xau_str = f"${xau:.2f}" if xau is not None else "Unavailable"
         btc_str = f"${btc:.0f}" if btc is not None else "Unavailable"
-        msg = f"<b>💰 PRICES</b>\n\nXAUUSD: {xau_str}\nBTCUSD: {btc_str}"
+        msg = f"<b>💰 PRICES (EXNESS SYNC)</b>\n\nXAUUSD: {xau_str}\nBTCUSD: {btc_str}"
         await update.message.reply_html(msg)
     except Exception as e:
         logger.error(f"Error in price_command: {e}")
@@ -347,6 +353,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 async def main():
     global application, main_loop
     main_loop = asyncio.get_running_loop()
+    
+    # 💎 FIX CONFLICT ERROR: Delete webhook and clear old updates
+    try:
+        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook", timeout=5)
+        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset=-1&limit=1", timeout=5)
+    except: pass
+
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     application.add_error_handler(error_handler)
     application.add_handler(CommandHandler("start", start))
@@ -354,11 +367,14 @@ async def main():
     application.add_handler(CommandHandler("price", price_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("active", active_command))
+    
     await application.initialize()
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
+    
     print("✅ Ultimate Sniper Bot V5 Started")
-    await send_telegram("🚀 <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n<i>Maximum aggression activated.</i>")
+    await send_telegram("🚀 <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n<i>Exness Price Sync Activated.</i>")
+    
     asyncio.create_task(monitor_tp_sl())
     threading.Thread(target=run_btc_ws, daemon=True).start()
     await fetch_gold_price_loop()
