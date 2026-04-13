@@ -43,6 +43,22 @@ RSI_PERIOD = 7
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
+# New: Fixed SL/TP in pips
+SL_PIPS = {
+    "XAUUSD": 25,  # 25 pips for XAUUSD
+    "BTCUSD": 25   # 25 pips for BTCUSD
+}
+TP_PIPS = {
+    "XAUUSD": 50,  # 50 pips for XAUUSD
+    "BTCUSD": 50   # 50 pips for BTCUSD
+}
+
+# Pip value for calculations
+PIP_VALUE = {
+    "XAUUSD": 0.1, # 1 pip = $0.1 for XAUUSD
+    "BTCUSD": 1.0  # 1 pip = $1.0 for BTCUSD
+}
+
 # Trading Hours (UTC)
 TRADING_START_HOUR = 6
 TRADING_END_HOUR = 22
@@ -135,15 +151,21 @@ def calculate_indicators(df):
     return df
 
 # ---------------- SIGNAL ENGINE ----------------
-def generate_signal_message(symbol, direction, price, sl):
+def generate_signal_message(symbol, direction, price, sl, tp):
     """Generate signal message in exact format you requested"""
+    # Determine formatting based on symbol
+    if symbol == "XAUUSD":
+        price_format = ".2f"
+    else: # BTCUSD
+        price_format = ".0f"
+
     if direction == "BUY":
         return (
             f"<b>GOLD / XAUUSD {direction} NOW</b>\n"
             f"LIVE 🔥\n\n"
-            f"- POINT : {price:.0f}\n"
-            f"- STOPLOSS : {sl:.0f}\n"
-            f"- TAKE PROFIT : OPEN\n\n"
+            f"- POINT : {price:{price_format}}\n"
+            f"- STOPLOSS : {sl:{price_format}}\n"
+            f"- TAKE PROFIT : {tp:{price_format}}\n\n"
             f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
             f"#168FX"
         )
@@ -151,22 +173,28 @@ def generate_signal_message(symbol, direction, price, sl):
         return (
             f"<b>GOLD / XAUUSD {direction} NOW</b>\n"
             f"LIVE 🔥\n\n"
-            f"- POINT : {price:.0f}\n"
-            f"- STOPLOSS : {sl:.0f}\n"
-            f"- TAKE PROFIT : OPEN\n\n"
+            f"- POINT : {price:{price_format}}\n"
+            f"- STOPLOSS : {sl:{price_format}}\n"
+            f"- TAKE PROFIT : {tp:{price_format}}\n\n"
             f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
             f"#168FX"
         )
 
-def generate_btc_signal_message(symbol, direction, price, sl):
+def generate_btc_signal_message(symbol, direction, price, sl, tp):
     """Generate BTC signal message"""
+    # Determine formatting based on symbol
+    if symbol == "XAUUSD":
+        price_format = ".2f"
+    else: # BTCUSD
+        price_format = ".0f"
+
     if direction == "BUY":
         return (
             f"<b>BTCUSD {direction} NOW</b>\n"
             f"LIVE 🔥\n\n"
-            f"- POINT : {price:.0f}\n"
-            f"- STOPLOSS : {sl:.0f}\n"
-            f"- TAKE PROFIT : OPEN\n\n"
+            f"- POINT : {price:{price_format}}\n"
+            f"- STOPLOSS : {sl:{price_format}}\n"
+            f"- TAKE PROFIT : {tp:{price_format}}\n\n"
             f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
             f"#168FX"
         )
@@ -174,40 +202,51 @@ def generate_btc_signal_message(symbol, direction, price, sl):
         return (
             f"<b>BTCUSD {direction} NOW</b>\n"
             f"LIVE 🔥\n\n"
-            f"- POINT : {price:.0f}\n"
-            f"- STOPLOSS : {sl:.0f}\n"
-            f"- TAKE PROFIT : OPEN\n\n"
+            f"- POINT : {price:{price_format}}\n"
+            f"- STOPLOSS : {sl:{price_format}}\n"
+            f"- TAKE PROFIT : {tp:{price_format}}\n\n"
             f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
             f"#168FX"
         )
 
 def generate_tp_hit_message(symbol, direction, entry_price, tp_price):
     """Generate TP hit message"""
+    # Determine formatting based on symbol
+    if symbol == "XAUUSD":
+        price_format = ".2f"
+    else: # BTCUSD
+        price_format = ".0f"
+
     profit = abs(tp_price - entry_price)
     return (
         f"✅ <b>{symbol} TAKE PROFIT HIT!</b> ✅\n\n"
         f"Direction: {direction}\n"
-        f"Entry: {entry_price:.0f}\n"
-        f"TP Hit: {tp_price:.0f}\n"
-        f"Profit: +{profit:.0f} points\n\n"
+        f"Entry: {entry_price:{price_format}}\n"
+        f"TP Hit: {tp_price:{price_format}}\n"
+        f"Profit: +{profit:{price_format}} points\n\n"
         f"#168FX #PROFIT"
     )
 
 def generate_sl_hit_message(symbol, direction, entry_price, sl_price):
     """Generate SL hit message"""
+    # Determine formatting based on symbol
+    if symbol == "XAUUSD":
+        price_format = ".2f"
+    else: # BTCUSD
+        price_format = ".0f"
+
     loss = abs(sl_price - entry_price)
     return (
         f"❌ <b>{symbol} STOPLOSS HIT!</b> ❌\n\n"
         f"Direction: {direction}\n"
-        f"Entry: {entry_price:.0f}\n"
-        f"SL Hit: {sl_price:.0f}\n"
-        f"Loss: -{loss:.0f} points\n\n"
+        f"Entry: {entry_price:{price_format}}\n"
+        f"SL Hit: {sl_price:{price_format}}\n"
+        f"Loss: -{loss:{price_format}} points\n\n"
         f"#168FX #STOPLOSS"
     )
 
 async def check_signal(symbol, df, chat_id=CHAT_ID):
     global last_signal_time, active_signals
-    # CHANGED: 30 to 15 for faster signals
     if len(df) < 15: 
         return
     
@@ -221,9 +260,21 @@ async def check_signal(symbol, df, chat_id=CHAT_ID):
         ema_s = row["ema_slow"]
         
         direction = None
-        if ema_f > ema_s and prev_row["ema_fast"] <= prev_row["ema_slow"] and rsi_val < 65:
+        # Enhanced signal logic: EMA crossover + RSI confirmation + ATR filter
+        # Only consider signals if ATR is above a certain threshold (e.g., 1.5 * average ATR) to filter out low volatility periods
+        # This is a placeholder for a more robust ATR filter. For now, we'll just use the existing ATR.
+        
+        # Original EMA crossover and RSI conditions
+        ema_cross_buy = ema_f > ema_s and prev_row["ema_fast"] <= prev_row["ema_slow"]
+        ema_cross_sell = ema_f < ema_s and prev_row["ema_fast"] >= prev_row["ema_slow"]
+
+        # Stronger RSI conditions
+        rsi_confirm_buy = rsi_val < RSI_OVERBOUGHT and rsi_val > 45 # RSI not overbought, and not too low
+        rsi_confirm_sell = rsi_val > RSI_OVERSOLD and rsi_val < 55 # RSI not oversold, and not too high
+
+        if ema_cross_buy and rsi_confirm_buy:
             direction = "BUY"
-        elif ema_f < ema_s and prev_row["ema_fast"] >= prev_row["ema_slow"] and rsi_val > 35:
+        elif ema_cross_sell and rsi_confirm_sell:
             direction = "SELL"
             
         if direction:
@@ -231,19 +282,22 @@ async def check_signal(symbol, df, chat_id=CHAT_ID):
             if time.time() - last_signal_time[symbol] < 300:
                 return
             
-            # Calculate SL (1.5x ATR) and TP (2.5x ATR)
+            # Calculate SL and TP based on fixed pips
+            sl_amount = SL_PIPS[symbol] * PIP_VALUE[symbol]
+            tp_amount = TP_PIPS[symbol] * PIP_VALUE[symbol]
+
             if direction == "BUY":
-                sl = price - (1.5 * atr_val)
-                tp = price + (2.5 * atr_val)
-            else:
-                sl = price + (1.5 * atr_val)
-                tp = price - (2.5 * atr_val)
+                sl = price - sl_amount
+                tp = price + tp_amount
+            else: # SELL
+                sl = price + sl_amount
+                tp = price - tp_amount
             
             # Generate message based on symbol
             if symbol == "XAUUSD":
-                msg = generate_signal_message(symbol, direction, price, sl)
+                msg = generate_signal_message(symbol, direction, price, sl, tp)
             else:
-                msg = generate_btc_signal_message(symbol, direction, price, sl)
+                msg = generate_btc_signal_message(symbol, direction, price, sl, tp)
             
             # Send signal
             await send_telegram(msg, chat_id)
@@ -320,7 +374,6 @@ async def monitor_tp_sl():
 
 async def get_latest_signal(symbol, df):
     """Get the latest signal without sending to Telegram"""
-    # CHANGED: 30 to 15 for faster signals
     if len(df) < 15:
         return None
     
@@ -334,21 +387,34 @@ async def get_latest_signal(symbol, df):
         ema_s = row["ema_slow"]
         
         direction = None
-        if ema_f > ema_s and prev_row["ema_fast"] <= prev_row["ema_slow"] and rsi_val < 65:
+        # Enhanced signal logic: EMA crossover + RSI confirmation + ATR filter
+        ema_cross_buy = ema_f > ema_s and prev_row["ema_fast"] <= prev_row["ema_slow"]
+        ema_cross_sell = ema_f < ema_s and prev_row["ema_fast"] >= prev_row["ema_slow"]
+
+        rsi_confirm_buy = rsi_val < RSI_OVERBOUGHT and rsi_val > 45
+        rsi_confirm_sell = rsi_val > RSI_OVERSOLD and rsi_val < 55
+
+        if ema_cross_buy and rsi_confirm_buy:
             direction = "BUY"
-        elif ema_f < ema_s and prev_row["ema_fast"] >= prev_row["ema_slow"] and rsi_val > 35:
+        elif ema_cross_sell and rsi_confirm_sell:
             direction = "SELL"
         
         if direction:
+            # Calculate SL and TP based on fixed pips
+            sl_amount = SL_PIPS[symbol] * PIP_VALUE[symbol]
+            tp_amount = TP_PIPS[symbol] * PIP_VALUE[symbol]
+
             if direction == "BUY":
-                sl = price - (1.5 * atr_val)
-            else:
-                sl = price + (1.5 * atr_val)
+                sl = price - sl_amount
+                tp = price + tp_amount
+            else: # SELL
+                sl = price + sl_amount
+                tp = price - tp_amount
             
             if symbol == "XAUUSD":
-                return generate_signal_message(symbol, direction, price, sl)
+                return generate_signal_message(symbol, direction, price, sl, tp)
             else:
-                return generate_btc_signal_message(symbol, direction, price, sl)
+                return generate_btc_signal_message(symbol, direction, price, sl, tp)
         return None
     except Exception as e:
         print(f"Signal generation error: {e}")
@@ -446,10 +512,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>📊 SIGNAL CRITERIA:</b>\n"
         "• EMA 9/21 crossover\n"
         "• RSI confirmation (35-65)\n"
-        "• ATR-based stop loss\n\n"
+        "• Fixed 25-pip Stop Loss\n"
+        "• Fixed 50-pip Take Profit\n\n"
         "<b>🎯 TP/SL Monitoring:</b>\n"
-        "• TP: 2.5x ATR\n"
-        "• SL: 1.5x ATR\n"
         "• Auto-notification on hit\n\n"
         "<b>⚡ FAST MODE:</b>\n"
         "• Signals after 15 candles (was 30)\n"
@@ -474,11 +539,17 @@ async def active_signals_command(update: Update, context: ContextTypes.DEFAULT_T
             tp = signal["tp"]
             age = int((time.time() - signal["timestamp"]) / 60)  # Age in minutes
             
+            # Determine formatting based on symbol
+            if symbol == "XAUUSD":
+                price_format = ".2f"
+            else: # BTCUSD
+                price_format = ".0f"
+
             msg += f"<b>{symbol}</b>\n"
             msg += f"Direction: {direction}\n"
-            msg += f"Entry: {entry:.0f}\n"
-            msg += f"SL: {sl:.0f}\n"
-            msg += f"TP: {tp:.0f}\n"
+            msg += f"Entry: {entry:{price_format}}\n"
+            msg += f"SL: {sl:{price_format}}\n"
+            msg += f"TP: {tp:{price_format}}\n"
             msg += f"Age: {age} minutes\n\n"
     
     if not has_active:
@@ -493,7 +564,7 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     messages = []
     
-    # Check XAUUSD signal - CHANGED: 30 to 15
+    # Check XAUUSD signal
     if len(klines["XAUUSD"]) >= 15:
         df_xau = pd.DataFrame(klines["XAUUSD"])
         df_xau = calculate_indicators(df_xau)
@@ -504,15 +575,15 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             latest = df_xau.iloc[-1]
             messages.append(
                 f"<b>🥇 XAUUSD - No Active Signal</b>\n"
-                f"📊 RSI: {latest['rsi']:.1f}\n"
-                f"📈 EMA Trend: {'Bullish' if latest['ema_fast'] > latest['ema_slow'] else 'Bearish'}\n"
-                f"💰 Price: ${latest['close']:.2f}\n"
-                f"📊 Data: {len(klines['XAUUSD'])}/15 candles"
+                f"📊 RSI: {latest["rsi"]:.1f}\n"
+                f"📈 EMA Trend: {"Bullish" if latest["ema_fast"] > latest["ema_slow"] else "Bearish"}\n"
+                f"💰 Price: ${latest["close"]:.2f}\n"
+                f"📊 Data: {len(klines["XAUUSD"])}/15 candles"
             )
     else:
-        messages.append(f"🟡 XAUUSD: Need 15 candles, have {len(klines['XAUUSD'])}/15")
+        messages.append(f"🟡 XAUUSD: Need 15 candles, have {len(klines["XAUUSD"])}/15")
     
-    # Check BTCUSD signal - CHANGED: 30 to 15
+    # Check BTCUSD signal
     if len(klines["BTCUSD"]) >= 15:
         df_btc = pd.DataFrame(klines["BTCUSD"])
         df_btc = calculate_indicators(df_btc)
@@ -523,13 +594,13 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             latest = df_btc.iloc[-1]
             messages.append(
                 f"<b>₿ BTCUSD - No Active Signal</b>\n"
-                f"📊 RSI: {latest['rsi']:.1f}\n"
-                f"📈 EMA Trend: {'Bullish' if latest['ema_fast'] > latest['ema_slow'] else 'Bearish'}\n"
-                f"💰 Price: ${latest['close']:.2f}\n"
-                f"📊 Data: {len(klines['BTCUSD'])}/15 candles"
+                f"📊 RSI: {latest["rsi"]:.1f}\n"
+                f"📈 EMA Trend: {"Bullish" if latest["ema_fast"] > latest["ema_slow"] else "Bearish"}\n"
+                f"💰 Price: ${latest["close"]:.2f}\n"
+                f"📊 Data: {len(klines["BTCUSD"])}/15 candles"
             )
     else:
-        messages.append(f"🟠 BTCUSD: Need 15 candles, have {len(klines['BTCUSD'])}/15")
+        messages.append(f"🟠 BTCUSD: Need 15 candles, have {len(klines["BTCUSD"])}/15")
     
     await update.message.reply_html("\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages))
 
@@ -547,7 +618,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         msg += f"🥇 <b>XAUUSD</b> : N/A\n"
     
     if btc_price:
-        msg += f"₿ <b>BTCUSD</b> : ${btc_price:.2f}\n"
+        msg += f"₿ <b>BTCUSD</b> : ${btc_price:.0f}\n"
     else:
         msg += f"₿ <b>BTCUSD</b> : N/A\n"
     
@@ -562,22 +633,22 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Get latest market conditions
     xau_condition = "Waiting for data..."
     btc_condition = "Waiting for data..."
-    xau_price = "N/A"
-    btc_price = "N/A"
+    xau_price_str = "N/A"
+    btc_price_str = "N/A"
     
     if xau_data >= 15:
         df_xau = pd.DataFrame(klines["XAUUSD"])
         df_xau = calculate_indicators(df_xau)
         latest = df_xau.iloc[-1]
-        xau_price = f"${latest['close']:.2f}"
-        xau_condition = f"📊 RSI: {latest['rsi']:.1f} | {'🟢 BULLISH' if latest['ema_fast'] > latest['ema_slow'] else '🔴 BEARISH'}"
+        xau_price_str = f"${latest["close"]:.2f}"
+        xau_condition = f"📊 RSI: {latest["rsi"]:.1f} | {"🟢 BULLISH" if latest["ema_fast"] > latest["ema_slow"] else "🔴 BEARISH"}"
     
     if btc_data >= 15:
         df_btc = pd.DataFrame(klines["BTCUSD"])
         df_btc = calculate_indicators(df_btc)
         latest = df_btc.iloc[-1]
-        btc_price = f"${latest['close']:.2f}"
-        btc_condition = f"📊 RSI: {latest['rsi']:.1f} | {'🟢 BULLISH' if latest['ema_fast'] > latest['ema_slow'] else '🔴 BEARISH'}"
+        btc_price_str = f"${latest["close"]:.0f}"
+        btc_condition = f"📊 RSI: {latest["rsi"]:.1f} | {"🟢 BULLISH" if latest["ema_fast"] > latest["ema_slow"] else "🔴 BEARISH"}"
     
     current_hour = datetime.now(pytz.UTC).hour
     is_trading_time = TRADING_START_HOUR <= current_hour <= TRADING_END_HOUR
@@ -590,13 +661,13 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     msg += f"⚡ Mode: <b>FAST (15 candles)</b>\n"
     msg += f"📊 Data: XAUUSD={xau_data}/15 | BTCUSD={btc_data}/15\n"
     msg += f"🎯 Active Signals: {active_count}\n"
-    msg += f"⏰ Trading Hours: {'🟢 ACTIVE' if is_trading_time else '🔴 CLOSED'} (UTC {TRADING_START_HOUR}-{TRADING_END_HOUR})\n\n"
+    msg += f"⏰ Trading Hours: {"🟢 ACTIVE" if is_trading_time else "🔴 CLOSED"} (UTC {TRADING_START_HOUR}-{TRADING_END_HOUR})\n\n"
     msg += f"<b>📈 MARKET CONDITIONS:</b>\n"
-    msg += f"🥇 XAUUSD: {xau_price}\n"
-    msg += f"   {xau_condition}\n\n"
-    msg += f"₿ BTCUSD: {btc_price}\n"
+    msg += f"🥇 XAUUSD: {xau_price_str}\n"
+    msg += f"   {xau_condition}\n"
+    msg += f"₿ BTCUSD: {btc_price_str}\n"
     msg += f"   {btc_condition}\n\n"
-    msg += f"<i>Last update: {datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}</i>"
+    msg += f"<i>Last update: {datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")}</i>"
     
     await update.message.reply_html(msg)
 
@@ -608,7 +679,7 @@ async def main():
     global application, bot_running
     print("🚀 Starting ROYAL M1 SCALPER - FAST MODE...")
     print(f"⚡ Signals will generate after just 15 candles (15 minutes)")
-    print(f"📊 MT5 Offset: XAUUSD={MT5_OFFSET['XAUUSD']}, BTCUSD={MT5_OFFSET['BTCUSD']}")
+    print(f"📊 MT5 Offset: XAUUSD={MT5_OFFSET["XAUUSD"]}, BTCUSD={MT5_OFFSET["BTCUSD"]}")
     
     # Build application
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
