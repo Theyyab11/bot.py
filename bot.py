@@ -1,6 +1,6 @@
-# ⚡ ROYAL SNIPER M1 SCALPER (XAUUSD & BTCUSD) - V4
-# 🎯 HIGH-PRECISION SIGNALS WITH 5-LEVEL TP & BREAKEVEN
-# 🚀 PREDICTIVE ALERTS & SNIPER ENTRY LOGIC
+# ⚡ ROYAL ULTIMATE SNIPER M1 SCALPER (XAUUSD & BTCUSD) - V5
+# 🎯 20+ PIP TPs | 35-PIP SL | AUTOMATIC LAYERING (DCA)
+# 🚀 PREDICTIVE ALERTS & TREND-STRENGTH ANALYSIS
 
 import websocket
 import json
@@ -38,13 +38,16 @@ EMA_FAST = 9
 EMA_SLOW = 21
 RSI_PERIOD = 7
 ADX_PERIOD = 14
-ADX_THRESHOLD = 30 # Increased for "Sniper" quality
-VOLUME_THRESHOLD_MULTIPLIER = 2.0 # Higher volume for sniper signals
+ADX_THRESHOLD = 35 # High threshold for "Ultimate Sniper"
+VOLUME_THRESHOLD_MULTIPLIER = 2.5 # High volume for sniper signals
 
-# Multi-TP Strategy (in pips)
-# Total target: 100+ pips
-TP_LEVELS = [10, 25, 50, 75, 100] 
-SL_PIPS = 30 # Initial SL
+# TP/SL Strategy (in pips)
+TP_LEVELS = [20, 40, 60, 80, 100] # TPs from 20 pips and above
+SL_PIPS = 35 # Strict 35-pip SL
+
+# Layering (DCA) Parameters
+LAYERING_DRAWDOWN_PIPS = 15 # Add a layer if price goes 15 pips against us
+MAX_LAYERS = 2 # Max 2 additional layers per signal
 
 # Pip value for calculations
 PIP_VALUE = {"XAUUSD": 0.1, "BTCUSD": 1.0}
@@ -125,10 +128,8 @@ def calculate_indicators(df):
     return df
 
 # ---------------- SIGNAL ENGINE ----------------
-def generate_sniper_message(symbol, direction, price, sl, tps):
+def generate_ultimate_sniper_message(symbol, direction, price, sl, tps):
     price_format = ".2f" if symbol == "XAUUSD" else ".0f"
-    
-    # Safe formatting for sniper message
     p_str = f"{price:{price_format}}" if price is not None else "N/A"
     sl_str = f"{sl:{price_format}}" if sl is not None else "N/A"
     tp_lines = []
@@ -138,12 +139,12 @@ def generate_sniper_message(symbol, direction, price, sl, tps):
     tp_text = "\n".join(tp_lines)
     
     return (
-        f"<b>🚀 SNIPER {symbol} {direction} NOW</b>\n"
+        f"<b>🔥 ULTIMATE SNIPER {symbol} {direction} NOW</b>\n"
         f"ENTRY: {p_str}\n\n"
         f"{tp_text}\n"
         f"🛑 SL: {sl_str}\n\n"
-        f"⚡ <i>Breakeven applied after TP 1</i>\n"
-        f"#168FX #SNIPER"
+        f"⚡ <i>Aggressive Layering Active</i>\n"
+        f"#168FX #ULTIMATE"
     )
 
 async def check_signal(symbol, df):
@@ -158,49 +159,40 @@ async def check_signal(symbol, df):
         adx_val = row["adx"]
         rsi_val = row["rsi"]
         
-        # 1. PRE-SIGNAL LOGIC (Predictive)
+        # 1. PRE-SIGNAL LOGIC
         ema_diff = abs(ema_f - ema_s)
         prev_ema_diff = abs(prev_row["ema_fast"] - prev_row["ema_slow"])
-        
-        # If EMAs are converging rapidly, send a warning
-        if ema_diff < prev_ema_diff * 0.5 and not pre_signal_sent[symbol] and active_signals[symbol] is None:
+        if ema_diff < prev_ema_diff * 0.4 and not pre_signal_sent[symbol] and active_signals[symbol] is None:
             await send_telegram(f"⏳ <b>Be ready: {symbol} signal in 30-60 seconds</b>")
             pre_signal_sent[symbol] = True
 
-        # 2. SNIPER ENTRY LOGIC
+        # 2. ULTIMATE SNIPER ENTRY
         direction = None
         ema_cross_buy = ema_f > ema_s and prev_row["ema_fast"] <= prev_row["ema_slow"]
         ema_cross_sell = ema_f < ema_s and prev_row["ema_fast"] >= prev_row["ema_slow"]
         
-        # Strong confirmation
-        if ema_cross_buy and adx_val > ADX_THRESHOLD and rsi_val > 50:
+        if ema_cross_buy and adx_val > ADX_THRESHOLD and rsi_val > 55:
             direction = "BUY"
-        elif ema_cross_sell and adx_val > ADX_THRESHOLD and rsi_val < 50:
+        elif ema_cross_sell and adx_val > ADX_THRESHOLD and rsi_val < 45:
             direction = "SELL"
 
         if direction:
-            # Rule: Never send a new signal if previous is active
             if active_signals[symbol] is not None:
-                # If a new stronger signal appears, warn the user
                 await send_telegram(f"⚠️ <b>Collect your layers — a new strong {symbol} signal is coming.</b>")
                 return
 
-            # Calculate 5 TP levels
             pip = PIP_VALUE[symbol]
-            tps = []
-            for tp_pip in TP_LEVELS:
-                tps.append(price + (tp_pip * pip) if direction == "BUY" else price - (tp_pip * pip))
-            
+            tps = [price + (tp_pip * pip) if direction == "BUY" else price - (tp_pip * pip) for tp_pip in TP_LEVELS]
             sl = price - (SL_PIPS * pip) if direction == "BUY" else price + (SL_PIPS * pip)
             
-            msg = generate_sniper_message(symbol, direction, price, sl, tps)
+            msg = generate_ultimate_sniper_message(symbol, direction, price, sl, tps)
             await send_telegram(msg)
             
             active_signals[symbol] = {
                 "direction": direction, "entry": price, "sl": sl, "tps": tps,
-                "tp_hit": [False] * 5, "breakeven": False, "timestamp": time.time()
+                "tp_hit": [False] * 5, "breakeven": False, "layers": 0, "timestamp": time.time()
             }
-            pre_signal_sent[symbol] = False # Reset pre-signal
+            pre_signal_sent[symbol] = False
             
     except Exception as e:
         logger.error(f"Signal check error: {e}")
@@ -218,33 +210,38 @@ async def monitor_tp_sl():
                 
                 direction = signal_data["direction"]
                 entry = signal_data["entry"]
+                pip = PIP_VALUE[symbol]
                 
-                # Check TPs
+                # 1. LAYERING (DCA) LOGIC
+                drawdown = (entry - current_price) if direction == "BUY" else (current_price - entry)
+                if drawdown >= (LAYERING_DRAWDOWN_PIPS * pip) and signal_data["layers"] < MAX_LAYERS:
+                    signal_data["layers"] += 1
+                    price_format = ".2f" if symbol == "XAUUSD" else ".0f"
+                    await send_telegram(f"💎 <b>{symbol} DRAWDOWN: Add Layer {signal_data['layers']} @ {current_price:{price_format}}</b>\n<i>Getting more profit from down!</i>")
+                
+                # 2. TP TRACKING
                 for i, tp in enumerate(signal_data["tps"]):
                     if not signal_data["tp_hit"][i]:
                         hit = (direction == "BUY" and current_price >= tp) or (direction == "SELL" and current_price <= tp)
                         if hit:
                             signal_data["tp_hit"][i] = True
-                            await send_telegram(f"✅ <b>{symbol} TP {i+1} HIT!</b>")
-                            
-                            # Automatic Breakeven after TP 1
+                            await send_telegram(f"✅ <b>{symbol} TP {i+1} HIT! (+{TP_LEVELS[i]} pips)</b>")
                             if i == 0 and not signal_data["breakeven"]:
                                 signal_data["sl"] = entry
                                 signal_data["breakeven"] = True
                                 await send_telegram(f"🛡️ <b>{symbol} SL moved to Breakeven.</b>")
                 
-                # Check SL
+                # 3. SL TRACKING
                 sl_hit = (direction == "BUY" and current_price <= signal_data["sl"]) or (direction == "SELL" and current_price >= signal_data["sl"])
                 if sl_hit:
-                    await send_telegram(f"❌ <b>{symbol} SL HIT.</b>")
+                    await send_telegram(f"❌ <b>{symbol} SL HIT (-35 pips).</b>")
                     active_signals[symbol] = None
                 
-                # Close if all TPs hit
                 if all(signal_data["tp_hit"]):
                     await send_telegram(f"💰 <b>{symbol} ALL TPs HIT! Signal Closed.</b>")
                     active_signals[symbol] = None
 
-            await asyncio.sleep(1) # High frequency monitoring
+            await asyncio.sleep(1)
         except Exception as e:
             logger.error(f"Monitor error: {e}")
             await asyncio.sleep(1)
@@ -266,7 +263,7 @@ async def fetch_gold_price_loop():
                     df = pd.DataFrame(klines["XAUUSD"])
                     df = calculate_indicators(df)
                     await check_signal("XAUUSD", df)
-            await asyncio.sleep(1) # High frequency for Gold
+            await asyncio.sleep(1)
         except Exception as e:
             logger.error(f"Gold fetch error: {e}")
             await asyncio.sleep(1)
@@ -305,7 +302,7 @@ def run_btc_ws():
 
 # ---------------- COMMANDS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html("✅ <b>ROYAL SNIPER V4 ONLINE</b>\n\n/price | /signal | /status | /active")
+    await update.message.reply_html("✅ <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n\n/price | /signal | /status | /active")
 
 async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html("<b>Wait. I will give you a good entry shortly.</b>")
@@ -314,11 +311,8 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         xau = await fetch_price("XAUUSD")
         btc = await fetch_price("BTCUSD")
-        
-        # Bulletproof formatting for price command
         xau_str = f"${xau:.2f}" if xau is not None else "Unavailable"
         btc_str = f"${btc:.0f}" if btc is not None else "Unavailable"
-        
         msg = f"<b>💰 PRICES</b>\n\nXAUUSD: {xau_str}\nBTCUSD: {btc_str}"
         await update.message.reply_html(msg)
     except Exception as e:
@@ -326,7 +320,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_html("❌ Error fetching prices.")
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "<b>🤖 SNIPER STATUS: ACTIVE</b>\n\n"
+    msg = "<b>🤖 ULTIMATE SNIPER STATUS: ACTIVE</b>\n\n"
     for symbol in ["XAUUSD", "BTCUSD"]:
         msg += f"📊 {symbol}: {len(klines[symbol])} candles\n"
     await update.message.reply_html(msg)
@@ -339,7 +333,7 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             has_active = True
             price_format = ".2f" if symbol == "XAUUSD" else ".0f"
             e_str = f"{signal_data['entry']:{price_format}}" if signal_data['entry'] is not None else "N/A"
-            msg += f"<b>{symbol}</b>: {signal_data['direction']} @ {e_str}\n"
+            msg += f"<b>{symbol}</b>: {signal_data['direction']} @ {e_str}\nLayers: {signal_data['layers']}\n"
     if not has_active: msg += "No active signals."
     await update.message.reply_html(msg)
 
@@ -354,23 +348,17 @@ async def main():
     global application, main_loop
     main_loop = asyncio.get_running_loop()
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
-    # Add error handler
     application.add_error_handler(error_handler)
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("signal", signal_command))
     application.add_handler(CommandHandler("price", price_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("active", active_command))
-    
     await application.initialize()
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
-    
-    print("✅ Sniper Bot V4 Started")
-    await send_telegram("🚀 <b>ROYAL SNIPER V4 ONLINE</b>\n<i>Aggressive mode activated.</i>")
-    
+    print("✅ Ultimate Sniper Bot V5 Started")
+    await send_telegram("🚀 <b>ROYAL ULTIMATE SNIPER V5 ONLINE</b>\n<i>Maximum aggression activated.</i>")
     asyncio.create_task(monitor_tp_sl())
     threading.Thread(target=run_btc_ws, daemon=True).start()
     await fetch_gold_price_loop()
