@@ -14,8 +14,16 @@ import asyncio
 import os
 import signal
 import sys
+import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# ---------------- LOGGING ----------------
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # ---------------- CONFIG ----------------
 TELEGRAM_TOKEN = "8601674578:AAHycLEx-6M_r_JHFuS96oKuLTBJqefwKnk"
@@ -105,9 +113,11 @@ async def fetch_price(symbol):
         elif symbol == "BTCUSD":
             url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
             res = requests.get(url, timeout=5).json()
-            price = float(res["price"])
-            price += MT5_OFFSET.get("BTCUSD", 0)
-            return price
+            if "price" in res:
+                price = float(res["price"])
+                price += MT5_OFFSET.get("BTCUSD", 0)
+                return price
+            return None
     except Exception as e:
         print(f"Error fetching {symbol}: {e}")
         return None
@@ -174,12 +184,17 @@ def generate_signal_message(symbol, direction, price, sl, tp):
         price_format = ".0f"
         symbol_name = "BTCUSD"
 
+    # Safety check for None values
+    p_str = f"{price:{price_format}}" if price is not None else "N/A"
+    sl_str = f"{sl:{price_format}}" if sl is not None else "N/A"
+    tp_str = f"{tp:{price_format}}" if tp is not None else "N/A"
+
     return (
         f"<b>{symbol_name} {direction} NOW</b>\n"
         f"LIVE 🔥\n\n"
-        f"- POINT : {price:{price_format}}\n"
-        f"- STOPLOSS : {sl:{price_format}}\n"
-        f"- TAKE PROFIT : {tp:{price_format}}\n\n"
+        f"- POINT : {p_str}\n"
+        f"- STOPLOSS : {sl_str}\n"
+        f"- TAKE PROFIT : {tp_str}\n\n"
         f"PLEASE ENSURE PROPER MONEY MANAGEMENT !!!\n\n"
         f"#168FX"
     )
@@ -187,26 +202,36 @@ def generate_signal_message(symbol, direction, price, sl, tp):
 def generate_tp_hit_message(symbol, direction, entry_price, tp_price):
     """Generate TP hit message"""
     price_format = ".2f" if symbol == "XAUUSD" else ".0f"
-    profit = abs(tp_price - entry_price)
+    profit = abs(tp_price - entry_price) if (tp_price is not None and entry_price is not None) else 0
+    
+    e_str = f"{entry_price:{price_format}}" if entry_price is not None else "N/A"
+    t_str = f"{tp_price:{price_format}}" if tp_price is not None else "N/A"
+    p_str = f"{profit:{price_format}}" if profit is not None else "0"
+
     return (
         f"✅ <b>{symbol} TAKE PROFIT HIT!</b> ✅\n\n"
         f"Direction: {direction}\n"
-        f"Entry: {entry_price:{price_format}}\n"
-        f"TP Hit: {tp_price:{price_format}}\n"
-        f"Profit: +{profit:{price_format}} points\n\n"
+        f"Entry: {e_str}\n"
+        f"TP Hit: {t_str}\n"
+        f"Profit: +{p_str} points\n\n"
         f"#168FX #PROFIT"
     )
 
 def generate_sl_hit_message(symbol, direction, entry_price, sl_price):
     """Generate SL hit message"""
     price_format = ".2f" if symbol == "XAUUSD" else ".0f"
-    loss = abs(sl_price - entry_price)
+    loss = abs(sl_price - entry_price) if (sl_price is not None and entry_price is not None) else 0
+    
+    e_str = f"{entry_price:{price_format}}" if entry_price is not None else "N/A"
+    s_str = f"{sl_price:{price_format}}" if sl_price is not None else "N/A"
+    l_str = f"{loss:{price_format}}" if loss is not None else "0"
+
     return (
         f"❌ <b>{symbol} STOPLOSS HIT!</b> ❌\n\n"
         f"Direction: {direction}\n"
-        f"Entry: {entry_price:{price_format}}\n"
-        f"SL Hit: {sl_price:{price_format}}\n"
-        f"Loss: -{loss:{price_format}} points\n\n"
+        f"Entry: {e_str}\n"
+        f"SL Hit: {s_str}\n"
+        f"Loss: -{l_str} points\n\n"
         f"#168FX #STOPLOSS"
     )
 
@@ -230,7 +255,7 @@ async def check_signal(symbol, df, chat_id=CHAT_ID):
         rsi_confirm_buy = 45 < rsi_val < 65
         rsi_confirm_sell = 35 < rsi_val < 55
         adx_confirm = adx_val > ADX_THRESHOLD
-
+        
         volume_confirm = True
         if symbol == "BTCUSD" and "volume" in df.columns and "avg_volume" in df.columns:
             if not df["avg_volume"].empty and df.iloc[-1]["volume"] > (df.iloc[-1]["avg_volume"] * VOLUME_THRESHOLD_MULTIPLIER):
@@ -280,16 +305,16 @@ async def monitor_tp_sl():
     global active_signals
     while bot_running:
         try:
-            for symbol, signal in list(active_signals.items()):
-                if signal is None:
+            for symbol, signal_data in list(active_signals.items()):
+                if signal_data is None:
                     continue
                 current_price = await fetch_price(symbol)
                 if current_price is None:
                     continue
-                entry = signal["entry_price"]
-                sl = signal["sl"]
-                tp = signal["tp"]
-                direction = signal["direction"]
+                entry = signal_data["entry_price"]
+                sl = signal_data["sl"]
+                tp = signal_data["tp"]
+                direction = signal_data["direction"]
                 if direction == "BUY":
                     if current_price >= tp:
                         msg = generate_tp_hit_message(symbol, direction, entry, tp)
@@ -308,7 +333,8 @@ async def monitor_tp_sl():
                         msg = generate_sl_hit_message(symbol, direction, entry, sl)
                         await send_telegram(msg)
                         active_signals[symbol] = None
-                if time.time() - signal["timestamp"] > 86400:
+                
+                if signal_data and time.time() - signal_data["timestamp"] > 86400:
                     active_signals[symbol] = None
             await asyncio.sleep(5)
         except Exception as e:
@@ -420,11 +446,16 @@ async def active_signals_command(update: Update, context: ContextTypes.DEFAULT_T
     global active_signals
     msg = "<b>📋 ACTIVE SIGNALS</b>\n\n"
     has_active = False
-    for symbol, signal in list(active_signals.items()):
-        if signal:
+    for symbol, signal_data in list(active_signals.items()):
+        if signal_data:
             has_active = True
             price_format = ".2f" if symbol == "XAUUSD" else ".0f"
-            msg += f"<b>{symbol}</b>: {signal['direction']} @ {signal['entry_price']:{price_format}}\nSL: {signal['sl']:{price_format}} | TP: {signal['tp']:{price_format}}\n\n"
+            
+            e_str = f"{signal_data['entry_price']:{price_format}}" if signal_data['entry_price'] is not None else "N/A"
+            sl_str = f"{signal_data['sl']:{price_format}}" if signal_data['sl'] is not None else "N/A"
+            tp_str = f"{signal_data['tp']:{price_format}}" if signal_data['tp'] is not None else "N/A"
+            
+            msg += f"<b>{symbol}</b>: {signal_data['direction']} @ {e_str}\nSL: {sl_str} | TP: {tp_str}\n\n"
     if not has_active: msg += "No active signals."
     await update.message.reply_html(msg)
 
@@ -442,10 +473,19 @@ async def signal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_html("\n\n".join(messages))
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    xau = await fetch_price("XAUUSD")
-    btc = await fetch_price("BTCUSD")
-    msg = f"<b>💰 PRICES</b>\n\nXAUUSD: ${xau:.2f}\nBTCUSD: ${btc:.0f}"
-    await update.message.reply_html(msg)
+    try:
+        xau = await fetch_price("XAUUSD")
+        btc = await fetch_price("BTCUSD")
+        
+        # Handle cases where one or both prices are unavailable
+        xau_str = f"${xau:.2f}" if xau is not None else "Unavailable"
+        btc_str = f"${btc:.0f}" if btc is not None else "Unavailable"
+        
+        msg = f"<b>💰 PRICES</b>\n\nXAUUSD: {xau_str}\nBTCUSD: {btc_str}"
+        await update.message.reply_html(msg)
+    except Exception as e:
+        logger.error(f"Error in price_command: {e}")
+        await update.message.reply_html("❌ Error fetching prices. Please try again later.")
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = f"<b>🤖 BOT STATUS: RUNNING</b>\n\n"
@@ -453,6 +493,15 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         data_len = len(klines[symbol])
         msg += f"📊 {symbol}: {data_len} candles\n"
     await update.message.reply_html(msg)
+
+# ---------------- ERROR HANDLER ----------------
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    
+    # Optional: Notify the user that an error occurred
+    if isinstance(update, Update) and update.effective_message:
+        await update.effective_message.reply_text("⚠️ An internal error occurred. The bot is still running.")
 
 # ---------------- MAIN ----------------
 async def main():
@@ -466,6 +515,10 @@ async def main():
     except: pass
     
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Add error handler
+    application.add_error_handler(error_handler)
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("price", price_command))
